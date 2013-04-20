@@ -1170,8 +1170,17 @@ void MotionModule::updateStatus()
     status.get()->set_walk_is_active(isWalkActive());
     status.get()->set_head_is_active(isHeadActive());
     status.get()->set_calibrated(calibrated());
+    status.get()->set_support_foot(
+        walkProvider.getSupportFoot() == LEFT_SUPPORT
+        ? messages::MotionStatus::LEFT_SUPPORT
+        : messages::MotionStatus::RIGHT_SUPPORT
+        );
 
     motionStatusOutput_.setMessage(status);
+
+    std::cout << "Support foot: "
+              << (status.get()->support_foot() == LEFT_SUPPORT ? "LEFT" : "RIGHT")
+              << std::endl;
 }
 
 } // namespace motion

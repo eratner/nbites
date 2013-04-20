@@ -335,9 +335,6 @@ void BHWalkProvider::setCommand(const WalkCommand::ptr command) {
 
     currentCommand = command;
 
-//    bhwalk_out << "BHWalk speed walk requested with command ";
-//    bhwalk_out << *(command.get());
-
     active();
 }
 
@@ -349,9 +346,6 @@ void BHWalkProvider::setCommand(const StepCommand::ptr command) {
     startOdometry = walkingEngine.theOdometryData;
     currentCommand = command;
 
-//    bhwalk_out << "BHWalk step walk requested with command ";
-//    bhwalk_out << *(command.get()) << endl;
-
     active();
 }
 
@@ -362,15 +356,20 @@ void BHWalkProvider::setCommand(const DestinationCommand::ptr command) {
     active();
 }
 
-const SupportFoot BHWalkProvider::getSupportFoot() const {
-    if (walkingEngine.getSupportLeg() == 0) {//TODO: WalkingEngine::left) {
+const SupportFoot BHWalkProvider::getSupportFoot() const
+{
+    if (walkingEngine.getSupportLeg() == 0)
+    {
         return LEFT_SUPPORT;
-    } else {
+    }
+    else
+    {
         return RIGHT_SUPPORT;
     }
 }
 
-bool BHWalkProvider::calibrated() const {
+bool BHWalkProvider::calibrated() const
+{
     return walkingEngine.theInertiaSensorData.calibrated;
 }
 
