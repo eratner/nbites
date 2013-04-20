@@ -4,7 +4,7 @@
 #include <iostream>
 #include "RobotConfig.h"
 
-SET_POOL_SIZE(messages::WorldModel,  16);
+SET_POOL_SIZE(messages::WorldModel,  24);
 SET_POOL_SIZE(messages::JointAngles, 16);
 SET_POOL_SIZE(messages::PackedImage16, 16);
 SET_POOL_SIZE(messages::YUVImage, 16);
@@ -101,6 +101,8 @@ Man::Man(boost::shared_ptr<AL::ALBroker> broker, const std::string &name)
 
     /** Comm **/
     commThread.addModule(comm);
+    comm._worldModelInput.wireTo(&behaviors.myWorldModelOut, true);
+    comm._gcResponseInput.wireTo(&gamestate.gcResponseOutput, true);
 #ifdef LOG_COMM
     commThread.log<messages::GameState>(&comm._gameStateOutput, "gamestate");
 #endif
@@ -175,6 +177,23 @@ Man::Man(boost::shared_ptr<AL::ALBroker> broker, const std::string &name)
     }
 
     leds.ledCommandsIn.wireTo(&behaviors.ledCommandOut);
+
+#ifdef LOG_LOCATION
+    cognitionThread.log<messages::RobotLocation>(&localization.output, "location");
+#endif
+
+#ifdef LOG_ODOMETRY
+    cognitionThread.log<messages::RobotLocation>(&motion.odometryOutput_, "odometry");
+#endif
+
+
+#ifdef LOG_OBSERVATIONS
+    cognitionThread.log<messages::VisionField>(&vision.vision_field, "observations");
+#endif
+
+#ifdef LOG_LOCALIZATION
+    cognitionThread.log<messages::ParticleSwarm>(&localization.particleOutput, "particleSwarm");
+#endif
 
 #ifdef LOG_IMAGES
     cognitionThread.logImage<messages::YUVImage>(&topTranscriber.imageOut,
