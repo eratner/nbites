@@ -41,8 +41,8 @@ void CameraCalibrate::init() {
         paramsTop[PITCH] = -0.01f;
         paramsBottom[ROLL] = -0.02f;
     } else if (name == "jayne") {
-        paramsTop[PITCH] = 0.025f;
-        paramsBottom[PITCH] = 0.005f;
+        paramsTop[PITCH] = 0.07f;
+        paramsBottom[PITCH] = 0.02f;
     } else if (name == "wash") {
         paramsTop[ROLL] = -0.01f;
     } else if (name == "kaylee") {
