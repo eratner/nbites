@@ -81,18 +81,19 @@ namespace man
             return (w1 < w2) ? true : false;
         }
 
-        // friend std::ostream& operator<<(std::ostream& out,
-        //                                 Particle p)
-        // {
-        //     //out << "Particle with weight " << p.getWeight() << " with "
-        //     // << p.getLocation().DebugString() << std::endl;
-        //     out << "Particle x:\n"; << p.getLocation().x() << "\n";
-        //     return out;
-        // }
+        friend std::ostream& operator<<(std::ostream& out,
+                                        Particle p)
+        {
+            out << "Particle (" << p.getLocation().x()
+                << ", " << p.getLocation().y() << ", "
+                << p.getLocation().h() << "; "
+                << p.getWeight() << ")" << std::endl;
+            return out;
+        }
 
     private:
         float weight;                           //! The particle weight.
-        messages::RobotLocation location;  //! The particle location (x, y, heading).
+        messages::RobotLocation location;       //! The particle location (x, y, heading).
 
     };
 

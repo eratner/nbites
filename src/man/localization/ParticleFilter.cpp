@@ -41,6 +41,8 @@ namespace man
             Particle p(randomLocation, weight);
             particles.push_back(p);
         }
+
+        testResetLocTo();
     }
 
     ParticleFilter::~ParticleFilter()
@@ -329,6 +331,82 @@ namespace man
        }
     }
 
+    void ParticleFilter::resetLocTo(const std::vector<messages::RobotLocation>& locations,
+                                    const std::vector<LocNormalParams>&         params)
+    {
+        if(locations.size() != params.size())
+        {
+            std::cout << "resetLocTo invalid arguments!" << std::endl;
+            resetLoc();
+            return;
+        }
+
+        // (1) Clear existing particles.
+        particles.clear();
+
+        // Note: if (tot. num. particles) % locations.size() != 0, then we may loose
+        //       particles.
+        float totalWeight = 0.0f;
+        // @todo we want the weights to be normally distributed as well.
+        float weight = 1.0f/parameters.numParticles;
+        int particlesPerMode = parameters.numParticles / locations.size();
+
+            std::cout << "Reseting loc to " << locations.size() << " modes of "
+            << particlesPerMode << " particles" << std::endl;
+
+        // (2) Add particles normally distributed about the means specified in
+        //     the locations.
+        std::vector<messages::RobotLocation>::const_iterator locIt = locations.begin();
+        std::vector<LocNormalParams>::const_iterator paramIt = params.begin();
+        int i = 0;
+        float pX = 0.0;
+        float pY = 0.0;
+        float pH = 0.0;
+        for(; locIt != locations.end(), paramIt != params.end(); ++locIt, ++paramIt)
+        {
+            for(i = 0; i < particlesPerMode; ++i)
+            {
+                pX = sampleNormal(locIt->x(), paramIt->sigma_x);
+                pY = sampleNormal(locIt->y(), paramIt->sigma_y);
+                pH = sampleNormal(locIt->h(), paramIt->sigma_h);
+
+                Particle p(pX, pY, pH, weight);
+
+                particles.push_back(p);
+            }
+        }
+    }
+
+    void ParticleFilter::testResetLocTo()
+    {
+        messages::RobotLocation loc_one;
+        loc_one.set_x(400.0f);
+        loc_one.set_y(400.0f);
+        loc_one.set_h(0.0f);
+
+        messages::RobotLocation loc_two;
+        loc_two.set_x(10.0f);
+        loc_two.set_y(10.0f);
+        loc_two.set_h(0.0f);
+
+        std::vector<messages::RobotLocation> locs;
+        locs.push_back(loc_one);
+        locs.push_back(loc_two);
+
+        std::vector<LocNormalParams> params;
+        params.push_back(LocNormalParams());
+        params.push_back(LocNormalParams());
+
+        std::cout << "Resetting the localization..." << std::endl;
+
+        resetLocTo(locs, params);
+
+        ParticleIt it = particles.begin();
+        for(; it != particles.end(); ++it)
+        {
+            std::cout << (*it) << std::endl;
+        }
+    }
 
     void ParticleFilter::resetLocToSide(bool blueSide)
     {

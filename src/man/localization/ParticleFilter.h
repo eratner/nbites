@@ -40,7 +40,7 @@ namespace man
     {
         FIELD_GREEN_HEIGHT,
         FIELD_GREEN_WIDTH,
-        250,
+        100,
         0.2f,
         0.05f,
         .5f,
@@ -101,6 +101,19 @@ namespace man
                         LocNormalParams params1 = LocNormalParams(),
                         LocNormalParams params2 = LocNormalParams());
         void resetLocToSide(bool blueSide);
+
+        /**
+         * @brief Resets the localization estimates to a collection of
+         *        normally distributed particles around N locations and
+         *        orientations on the field.
+         * @param locations A list of locations to reset localization to.
+         * @param params    A list of parameters about how to distribute
+         *                  the particles around the mean locations.
+         */
+        void resetLocTo(const std::vector<messages::RobotLocation>& locations,
+                        const std::vector<LocNormalParams>&         params);
+
+        void testResetLocTo();
 
     private:
         /**
