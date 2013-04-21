@@ -1182,10 +1182,6 @@ void MotionModule::updateStatus()
         );
 
     motionStatusOutput_.setMessage(status);
-
-    std::cout << "Support foot: "
-              << (status.get()->support_foot() == LEFT_SUPPORT ? "LEFT" : "RIGHT")
-              << std::endl;
 }
 
 } // namespace motion
