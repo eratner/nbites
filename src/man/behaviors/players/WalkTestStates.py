@@ -9,19 +9,14 @@ compare this file with the new one to see if they are different or not.
 (Maybe using another program (like R) to do this comparison?
 """
 
-import man.motion.SweetMoves as SweetMoves
+from .. import SweetMoves
 
 #Types
 DEST = 1
 WALK = 0
 
 # all walk vector values must be in the range [-1,1]
-UNIT_TEST1 = ((WALK, (1, 0, 0), 250),
-              (WALK, (0, 1, 0), 250),
-              (WALK, (.5, -.5, .75), 250),
-              (WALK, (-.4, .5, .5), 250),
-              (WALK, (.2, .2, .2), 250),
-              )
+UNIT_TEST1 = ((WALK, (0, 0.6, -0.3), 250),)
 
 STRAIGHT_ONLY = ((WALK, (1.0, 0, 0), 150),
                  (WALK, (0, 1.0, 0), 150),
@@ -50,7 +45,7 @@ START_STOP_DEST = ((DEST, (100, 0, 0), 500),
 def gameSet(player):
     if player.firstFrame():
         player.brain.nav.stand()
-        
+
     return player.stay()
 
 def gamePlaying(player):
@@ -70,13 +65,11 @@ def walkTest(player):
     This method processes the list of commands until there are
     none left
     """
-    stability = player.brain.stability
-    stability.updateStability() # collect stability variance data
 
     if player.firstFrame():
         if player.testCounter >= len(player.unitTest):
-            player.printf('Stability heuristic for this gait: {0}'.format(stability.getStabilityHeuristic()))
             return player.goLater('sitdown')
+
         currentCommand  = player.unitTest[player.testCounter]
         player.testCounter += 1
         player.testFrames = currentCommand[2]
