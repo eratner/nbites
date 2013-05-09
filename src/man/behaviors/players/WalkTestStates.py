@@ -56,9 +56,19 @@ def gamePlaying(player):
         player.gainsOn()
         player.brain.tracker.stopHeadMoves()
 
-        player.testCounter = 0
-        player.unitTest = UNIT_TEST1
-    return player.goLater('walkTest')
+    return player.goLater('orbitTest')
+    #     player.testCounter = 0
+    #     player.unitTest = UNIT_TEST1
+    # return player.goLater('walkTest')
+
+def orbitTest(player):
+    if player.firstFrame():
+        player.printf('Orbiting!')
+        player.brain.nav.orbitAngle(20, 120)
+    elif player.brain.nav.isStopped():
+        return player.goNow('sitdown')
+
+    return player.stay()
 
 def walkTest(player):
     """
