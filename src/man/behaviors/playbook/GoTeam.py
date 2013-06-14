@@ -54,10 +54,9 @@ class GoTeam:
 
     def run(self, play):
         """We run this each frame to get the latest info"""
-        if self.brain.interface.gameState.state != 'gamePenalized':
-            self.aPrioriTeammateUpdate()
+        self.aPrioriTeammateUpdate()
 
-        if self.brain.interface.gameState.state == 'gameReady':
+        if self.brain.player.gameState == 'gameReady':
             # Change which wing is forward based on the opponents score
             # TODO: implement this
             pass
@@ -154,6 +153,9 @@ class GoTeam:
                                 % mate.playerNumber)
                 continue
 
+            # If the mate is already at the ball, and will reach it first even if
+            #  another mate is closer and sees the ball next frame, it should be
+            #  chaser.
             elif (mate.hasBall() and
                   mate.chaseTime < TeamMember.BALL_OFF_PENALTY):
                 if PBConstants.DEBUG_DET_CHASER:
@@ -207,10 +209,10 @@ class GoTeam:
 
         # if we have two positions only two possibilites of positions
         elif len(positions) == 2:
-            myDist1 = hypot(positions[0].toTupleXY()[0] - self.brain.my.x,
-                            positions[0].toTupleXY()[1] - self.brain.my.y)
-            myDist2 = hypot(positions[1].toTupleXY()[0] - self.brain.my.x,
-                            positions[1].toTupleXY()[1] - self.brain.my.y)
+            myDist1 = hypot(positions[0].toTupleXY()[0] - self.brain.loc.x,
+                            positions[0].toTupleXY()[1] - self.brain.loc.y)
+            myDist2 = hypot(positions[1].toTupleXY()[0] - self.brain.loc.x,
+                            positions[1].toTupleXY()[1] - self.brain.loc.y)
             mateDist1 = hypot(positions[0].toTupleXY()[0] - mates[0].x,
                               positions[0].toTupleXY()[1] - mates[0].y)
             mateDist2 = hypot(positions[1].toTupleXY()[0] - mates[0].x,
@@ -240,8 +242,8 @@ class GoTeam:
                 x, y = 0.0, 0.0
                 # use either my estimate or teammates'
                 if bot_number == self.me.playerNumber:
-                    x = self.brain.my.x
-                    y = self.brain.my.y
+                    x = self.brain.loc.x
+                    y = self.brain.loc.y
                 else:
                     x = self.mates[bot_number-1].x
                     y = self.mates[bot_number-1].y
