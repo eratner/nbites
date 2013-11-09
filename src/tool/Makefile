@@ -10,9 +10,10 @@ FLAGS        = -DCMAKE_TOOLCHAIN_FILE=$(TOOLCHAIN)
 
 EXECUTABLE = tool
 LOC_EXECUTABLE = loc_tool
+BALL_EXECUTABLE = ball_tool
 VISION_EXECUTABLE = vision_tool
 CALIBRATE_EXECUTABLE = calibrate_tool
-
+PLAYBOOK_EXECUTABLE = playbook_tool
 
 .PHONY: build_tool
 build_tool:
@@ -39,6 +40,19 @@ loc: build_loc
 	@cd $(BUILD_DIR); \
 	./$(LOC_EXECUTABLE)
 
+.PHONY: build_ball
+build_ball:
+	mkdir -p $(BUILD_DIR)
+	cd $(BUILD_DIR); \
+	cmake $(FLAGS) $(SRC_DIR); \
+	$(MAKE) --no-print-directory $(BALL_EXECUTABLE)
+
+.PHONY: ball
+ball: build_ball
+	@echo "Running ball_tool executable."
+	@cd $(BUILD_DIR); \
+	./$(BALL_EXECUTABLE)
+
 .PHONY: build_vision
 build_vision:
 	mkdir -p $(BUILD_DIR)
@@ -61,9 +75,22 @@ build_calibrate:
 
 .PHONY: calibrate
 calibrate: build_calibrate
-	@echo "Running vision_tool executable."
+	@echo "Running calibrate_tool executable."
 	@cd $(BUILD_DIR); \
 	./$(CALIBRATE_EXECUTABLE)
+
+.PHONY: build_playbook
+build_playbook:
+	mkdir -p $(BUILD_DIR)
+	cd $(BUILD_DIR); \
+	cmake $(FLAGS) $(SRC_DIR); \
+	$(MAKE) --no-print-directory $(PLAYBOOK_EXECUTABLE)
+
+.PHONY: playbook
+playbook: build_playbook
+	@echo "Running playbook_tool executable."
+	@cd $(BUILD_DIR); \
+	./$(PLAYBOOK_EXECUTABLE)
 
 .PHONY: config
 config:

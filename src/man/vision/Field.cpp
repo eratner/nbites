@@ -52,6 +52,7 @@ Field::Field(Vision* vis, Threshold * thr)
 	// funding. - chown
 #ifdef OFFLINE
 	debugFieldEdge = false;
+	debugDrawFieldEdge = true;
 	debugHorizon = false;
 #endif
 }
@@ -70,7 +71,7 @@ void Field::initialScanForTopGreenPoints(int pH) {
 	int greenRun = 0;
     float possible = 0.0f;
 	int lastGreen;
-    const float BUFFER = 200.0f; // other fields should be farther than this
+    const float BUFFER = 100.0f; // other fields should be farther than this
 	// we need a better criteria for what the top is
 	for (int i = 0; i < HULLS; i++) {
 		good = 0;
@@ -102,7 +103,7 @@ void Field::initialScanForTopGreenPoints(int pH) {
                 topGreen = IMAGE_HEIGHT - 1;
             }
 			//pixel = thresh->thresholded[top][x];
-			if (Utility::isGreen(pixel) || Utility::isOrange(pixel)) {
+			if (Utility::isGreen(pixel)) {
 				lastGreen = top;
 				good++;
 				greenRun++;
@@ -123,19 +124,19 @@ void Field::initialScanForTopGreenPoints(int pH) {
 						int greens = 0;
 						int check2 = top;
 						int whites = 0;
+						int blues = 0;
 						bool found = false;
 						while ((thresh->getPixDistance(check) > BUFFER ||
 								check < IMAGE_HEIGHT / 2) && !found && check < IMAGE_HEIGHT - 1) {
 							check++;
 							pixel = thresh->getColor(x, check);
 							greens = 0;
-							while (Utility::isGreen(pixel) && check < IMAGE_HEIGHT - 1 &&
-								   greens < 6) {
+							while (Utility::isGreen(pixel) && check < IMAGE_HEIGHT - 1) {
 								check++;
 								greens++;
 								pixel = thresh->getColor(x, check);
 							}
-							if (greens >= 6) {
+							if (greens >= 15) {
 								check2 = check;
 								found = true;
 							} else if (greens > 2) {
@@ -146,10 +147,14 @@ void Field::initialScanForTopGreenPoints(int pH) {
 								if (Utility::isWhite(pixel)) {
 									whites++;
 								}
+								if (Utility::isBlue(pixel)) {
+									blues++;
+								}
 								pixel = thresh->getColor(x, check);
 							}
 							if (thresh->getPixDistance(check2) - thresh->getPixDistance(check)
-								> BUFFER / 2 && check - check2 > 5 && check - check2 - whites > 4) {
+								> BUFFER / 2 && check - check2 > 5 &&
+								(check - check2 - whites > 4 || blues > 6)) {
 								if (debugFieldEdge) {
 									cout << "Unsetting top green " <<
 										(thresh->getPixDistance(check2) - thresh->getPixDistance(check))
@@ -194,9 +199,12 @@ void Field::initialScanForTopGreenPoints(int pH) {
     }
     // look for odd spikes and quell them
     if (poseHorizon > -100) {
-        for (good = 1; good < HULLS - 1; good++) {
-            if (convex[good-1].y - convex[good].y > 15 && convex[good+1].y -
-                convex[good].y > 15) {
+		const int BARRIER = 15;
+        for (good = 4; good < HULLS - 4; good++) {
+            if (convex[good-1].y - convex[good].y > BARRIER &&
+				convex[good+1].y - convex[good].y > BARRIER &&
+				convex[good-2].y - convex[good].y > BARRIER &&
+				convex[good+2].y - convex[good].y > BARRIER) {
                 if (debugFieldEdge) {
                     cout << "Spike at " << convex[good].x << " " << convex[good].y <<
                         endl;
@@ -205,13 +213,13 @@ void Field::initialScanForTopGreenPoints(int pH) {
             }
         }
 		// special case for the edges
-		if (convex[HULLS - 2].y - convex[HULLS - 1].y > 15) {
+		/*if (convex[HULLS - 2].y - convex[HULLS - 1].y > BARRIER) {
 			convex[HULLS - 1].y = convex[HULLS - 2].y;
 		}
-		if (convex[1].y - convex[0].y > 15) {
+		if (convex[1].y - convex[0].y > BARRIER) {
 			convex[0].y = convex[1].y;
-		}
-    }
+			}*/
+	}
     for (good = 0; convex[good].y == IMAGE_HEIGHT && good < HULLS; good++) {}
     if (good < HULLS) {
         for (int i = good-1; i > -1; i--) {
@@ -243,6 +251,8 @@ void Field::findTopEdges(int M) {
     topEdge[0] = convex[0].y;
     float maxPix = 0.0f;
     estimate e;
+	peak = -1;
+	float maxLine = 1000.0f;
     for (int i = 1; i <= M; i++) {
         int diff = convex[i].y - convex[i-1].y;
         float step = 0.0f;
@@ -253,7 +263,11 @@ void Field::findTopEdges(int M) {
         for (int j = convex[i].x; j > convex[i-1].x; j--) {
             cur -= step;
             topEdge[j] = (int)cur;
-            if (debugFieldEdge) {
+			if (cur < maxLine) {
+				peak = j;
+				maxLine = cur;
+			}
+            if (debugDrawFieldEdge) {
                 if (j < convex[i].x - 2) {
                     vision->drawPoint(j, (int)cur, BLUE);
                 } else {
@@ -261,7 +275,7 @@ void Field::findTopEdges(int M) {
                 }
             }
         }
-        if (debugFieldEdge) {
+        if (debugDrawFieldEdge) {
             vision->drawLine(convex[i-1].x, convex[i-1].y, convex[i].x,
                              convex[i].y, ORANGE);
         }
@@ -288,6 +302,18 @@ void Field::findTopEdges(int M) {
                " there are " << M << " points." << endl;
         cout << "Max dist is " << maxPix << endl;
     }
+}
+
+/* Provides a rough guidline to whether the horizon slopes to the right or left
+   or is roughly horizontal;
+ */
+int Field::findSlant() {
+	if (topEdge[0] > topEdge[IMAGE_HEIGHT - 1] + 30) {
+		return 1;
+	} else if (topEdge[IMAGE_HEIGHT - 1] > topEdge[0] + 30) {
+		return -1;
+	}
+	return 0;
 }
 
 /** Find the convex hull of the field.    We've already found the point of maximal
@@ -602,17 +628,21 @@ void Field::bestShot(VisualFieldObject* left,
  */
 
 int Field::horizonAt(int x) {
-    if (x < 0 || x >= IMAGE_WIDTH) {
-        if (debugHorizon) {
-            cout << "Problem in horizon " << x << endl;
+    if (thresh->usingTopCamera) {
+        if (x < 0 || x >= IMAGE_WIDTH) {
+            if (debugHorizon) {
+                cout << "Problem in horizon " << x << endl;
+            }
+            if (x < 0) {
+                return topEdge[0];
+            } else {
+                return topEdge[IMAGE_WIDTH - 1];
+            }
         }
-        if (x < 0) {
-            return topEdge[0];
-        } else {
-            return topEdge[IMAGE_WIDTH - 1];
-        }
+        return topEdge[x];
     }
-    return topEdge[x];
+    else
+        return 0;
 }
 
 /* Project a line given a start coord and a new y value - note that this is

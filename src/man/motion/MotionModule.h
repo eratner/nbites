@@ -33,16 +33,21 @@
 #include "MotionStatus.pb.h"
 #include "StiffnessControl.pb.h"
 #include "FallStatus.pb.h"
+#include "HandSpeeds.pb.h"
 
 #include <vector>
 
 // For Conversions
 #include "NBMath.h"
 
+// Default speed for destination and odometry walk
+#define DEFAULT_SPEED .5f
+
 namespace man
 {
 namespace motion
 {
+
 /**
  * @class MotionModule
  */
@@ -111,8 +116,6 @@ public:
      *
      * Good for walking into a specific (x, y, h) position for the robot.
      *
-     * TODO: make turning on pedantic (stable, but less fast mode)
-     * as an option in the command
      */
     void sendMotionCommand(const DestinationCommand::ptr command);
     void sendMotionCommand(messages::DestinationWalk command);
@@ -210,6 +213,7 @@ public:
 
     /* Input/Output related to executing motion commands. */
     portals::InPortal<messages::JointAngles>       jointsInput_;
+    portals::InPortal<messages::JointAngles>       currentsInput_;
     portals::InPortal<messages::InertialState>     inertialsInput_;
     portals::InPortal<messages::FSR>               fsrInput_;
     portals::InPortal<messages::MotionCommand>     bodyCommandInput_;
@@ -222,6 +226,7 @@ public:
     portals::OutPortal<messages::JointAngles>  stiffnessOutput_;
     portals::OutPortal<messages::RobotLocation> odometryOutput_;
     portals::OutPortal<messages::MotionStatus> motionStatusOutput_;
+    portals::OutPortal<messages::HandSpeeds> handSpeedsOutput_;
 
 private:
     void preProcess();
@@ -259,6 +264,9 @@ private:
     // Make a new status proto and set it on the out portal
     void updateStatus();
 
+    // Update the hand speeds
+    void updateHandSpeeds();
+
     BHWalkProvider          walkProvider;
     ScriptedProvider        scriptedProvider;
     HeadProvider            headProvider;
@@ -273,6 +281,7 @@ private:
 
     // Last information retrieved from the sensors.
     std::vector<float>      sensorAngles;
+    std::vector<float>      sensorCurrents;
     std::vector<float>      sensorStiffnesses;
 
     std::vector<float>      nextJoints;
@@ -292,6 +301,7 @@ private:
 
     // For deciding if requests/commands have been processed already
     bool gainsOn;
+    bool stiff;
     long long lastRequest, lastBodyCommand, lastHeadCommand;
 };
 } // namespace motion

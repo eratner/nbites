@@ -1,6 +1,5 @@
 #include "MotionModule.h"
 #include "Profiler.h"
-
 #include <fstream>
 
 namespace man
@@ -8,23 +7,26 @@ namespace man
 namespace motion
 {
 MotionModule::MotionModule()
-    : jointsOutput_(base()),
-      stiffnessOutput_(base()),
-      odometryOutput_(base()),
-      motionStatusOutput_(base()),
-      curProvider(&nullBodyProvider),
-      nextProvider(&nullBodyProvider),
-      curHeadProvider(&nullHeadProvider),
-      nextHeadProvider(&nullHeadProvider),
-      nextJoints(std::vector<float>(Kinematics::NUM_JOINTS, 0.0f)),
-      nextStiffnesses(std::vector<float>(Kinematics::NUM_JOINTS, 0.0f)),
-      lastJoints(std::vector<float>(Kinematics::NUM_JOINTS, 0.0f)),
-      frameCount(0),
-      running(true),
-      newJoints(false),
-      newInputJoints(false),
-      readyToSend(false),
-      noWalkTransitionCommand(true)
+  : jointsOutput_(base()),
+    stiffnessOutput_(base()),
+    odometryOutput_(base()),
+    motionStatusOutput_(base()),
+    handSpeedsOutput_(base()),
+    curProvider(&nullBodyProvider),
+    nextProvider(&nullBodyProvider),
+    curHeadProvider(&nullHeadProvider),
+    nextHeadProvider(&nullHeadProvider),
+    nextJoints(std::vector<float>(Kinematics::NUM_JOINTS, 0.0f)),
+    nextStiffnesses(std::vector<float>(Kinematics::NUM_JOINTS, 0.0f)),
+    lastJoints(std::vector<float>(Kinematics::NUM_JOINTS, 0.0f)),
+    frameCount(0),
+    running(true),
+    newJoints(false),
+    newInputJoints(false),
+    readyToSend(false),
+    noWalkTransitionCommand(true),
+    gainsOn(false),
+    stiff(false)
 {
 
 }
@@ -49,6 +51,7 @@ void MotionModule::run_()
     // (1) Before anything else happens, it is important to
     //     retrieve the correct current joint angles.
     jointsInput_.latch();
+    currentsInput_.latch();
     inertialsInput_.latch();
     fsrInput_.latch();
     stiffnessInput_.latch();
@@ -57,7 +60,8 @@ void MotionModule::run_()
     requestInput_.latch();
     fallInput_.latch();
 
-    sensorAngles    = toJointAngles(jointsInput_.message());
+    sensorAngles   = toJointAngles(jointsInput_.message());
+    sensorCurrents = toJointAngles(currentsInput_.message());
 
     newInputJoints = false;
 
@@ -86,6 +90,7 @@ void MotionModule::run_()
         //     the messages that we output.
         updateOdometry();
         updateStatus();
+        updateHandSpeeds();
 
         newInputJoints = false;
         frameCount++;
@@ -185,13 +190,6 @@ bool MotionModule::postProcess()
         swapHeadProvider();
     }
 
-    // Update sensors with the correct support foot because it may have
-    // changed this frame.
-    // TODO: This can be improved by keeping a local copy of the SupportFoot
-    //       so that we only update sensors when there has been a change.
-    //       The overhead of the mutex shouldn't be that high though.
-    //sensors->setSupportFoot(curProvider->getSupportFoot());
-
     //return if one of the enactors is active
     return curProvider->isActive()  || curHeadProvider->isActive();
 }
@@ -207,15 +205,18 @@ void MotionModule::processBodyJoints()
             walkProvider.setStandby(true);
             //"fake" calculate - this is just for the sensor computation
             walkProvider.calculateNextJointsAndStiffnesses(
-                sensorAngles, inertialsInput_.message(), fsrInput_.message());
+                sensorAngles, sensorCurrents,
+                inertialsInput_.message(), fsrInput_.message());
             curProvider->calculateNextJointsAndStiffnesses(
-                sensorAngles, inertialsInput_.message(), fsrInput_.message());
+                sensorAngles, sensorCurrents,
+                inertialsInput_.message(), fsrInput_.message());
         }
         else
         {
             walkProvider.setStandby(false);
             walkProvider.calculateNextJointsAndStiffnesses(
-                sensorAngles, inertialsInput_.message(), fsrInput_.message());
+                sensorAngles, sensorCurrents, 
+                inertialsInput_.message(), fsrInput_.message());
         }
 
         const std::vector<float> llegJoints =
@@ -261,7 +262,7 @@ void MotionModule::processHeadJoints()
     if (curHeadProvider->isActive())
     {
         curHeadProvider->calculateNextJointsAndStiffnesses(
-            sensorAngles,
+            sensorAngles, sensorCurrents,
             inertialsInput_.message(),
             fsrInput_.message());
         std::vector<float> headJoints =
@@ -310,6 +311,7 @@ void MotionModule::processMotionInput()
             if (gainsOn)
             {
                 sendMotionCommand(FreezeCommand::ptr(new FreezeCommand()));
+                stiff = false;
             }
         }
         if (requestInput_.message().enable_stiffness())
@@ -320,26 +322,30 @@ void MotionModule::processMotionInput()
             {
                 sendMotionCommand(UnfreezeCommand::ptr(new UnfreezeCommand()));
                 gainsOn = true;
+                stiff = true;
             }
         }
+        return;
     }
 
     // (2) Guardian checks.
     if(stiffnessInput_.message().remove() && gainsOn)
     {
         gainsOn = false;
+        stiff = false;
         sendMotionCommand(FreezeCommand::ptr(new FreezeCommand()));
         return;
     }
     if(!stiffnessInput_.message().remove() && !gainsOn)
     {
         gainsOn = true;
+        stiff = true;
         sendMotionCommand(UnfreezeCommand::ptr(new UnfreezeCommand()));
         return;
     }
 
     // (3) Disallow further commands if we turned gains off.
-    if (!gainsOn)
+    if (!stiff)
         return;
 
     // (4) Process body commands.
@@ -368,6 +374,8 @@ void MotionModule::processMotionInput()
         {
             // Send an unfreeze command so we can stand up.
             sendMotionCommand(UnfreezeCommand::ptr(new UnfreezeCommand()));
+            gainsOn = true;
+            stiff = true;
             sendMotionCommand(bodyCommandInput_.message().script());
         }
     }
@@ -446,27 +454,27 @@ void MotionModule::clipHeadJoints(std::vector<float>& joints)
     float yaw   = (float)fabs(joints[Kinematics::HEAD_YAW]);
     float pitch = joints[Kinematics::HEAD_PITCH];
 
-    if (yaw < 0.5f)
+    if (yaw < 0.2f)
     {
-        if (pitch > 0.46)
-        {
-            pitch = 0.46f;
-        }
-    }
-
-    else if (yaw < 1.0f)
-    {
-        if (pitch > 0.4f)
+        if (pitch > 0.4)
         {
             pitch = 0.4f;
         }
     }
 
+    else if (yaw < 1.0f)
+    {
+        if (pitch > 0.35f)
+        {
+            pitch = 0.35f;
+        }
+    }
+
     else if (yaw < 1.32f)
     {
-        if (pitch > 0.42f)
+        if (pitch > 0.3f)
         {
-            pitch = 0.42f;
+            pitch = 0.3f;
         }
     }
 
@@ -476,9 +484,9 @@ void MotionModule::clipHeadJoints(std::vector<float>& joints)
         //{
         //    pitch = -0.2f;
         //}
-        if (pitch > 0.2f)
+        if (pitch > 0.25f)
         {
-            pitch = 0.2f;
+            pitch = 0.25f;
         }
     }
 
@@ -488,9 +496,9 @@ void MotionModule::clipHeadJoints(std::vector<float>& joints)
         //{
         //    pitch = -0.3f;
         //}
-        if (pitch > 0.2f)
+        if (pitch > 0.25f)
         {
-            pitch = 0.2f;
+            pitch = 0.25f;
         }
     }
 
@@ -670,8 +678,9 @@ void MotionModule::sendMotionCommand(messages::WalkCommand command)
         new WalkCommand(
             command.x_percent(),
             command.y_percent(),
-            command.h_percent())
-        );
+            command.h_percent()
+            )
+    );
     walkProvider.setCommand(walkCommand);
 }
 
@@ -904,17 +913,19 @@ void MotionModule::sendMotionCommand(const DestinationCommand::ptr command)
 void MotionModule::sendMotionCommand(messages::DestinationWalk command)
 {
     // Message is coming from behaviors in centimeters and degrees
-    // StepCommands take millimeters and radians so Convert!
+    // StepCommands take millimeters and radians so convert!
     float relX = command.rel_x() * CM_TO_MM;
     float relY = command.rel_y() * CM_TO_MM;
     float relH = command.rel_h() * TO_RAD;
 
-    // For now go at half speed for odometry walk
-    // @TODO major refactoring on all dis shit. lets make it hot
-    float DEFAULT_SPEED = .5f;
-    float gain = DEFAULT_SPEED;
+    float ballRelX = command.kick().ball_rel_x() * CM_TO_MM;
+    float ballRelY = command.kick().ball_rel_y() * CM_TO_MM;
+
+    float gain; 
     if(command.gain() > 0.f)
         gain = command.gain();
+    else
+        gain = DEFAULT_SPEED;
 
     nextProvider = &walkProvider;
     DestinationCommand::ptr newCommand(
@@ -922,7 +933,12 @@ void MotionModule::sendMotionCommand(messages::DestinationWalk command)
             relX,
             relY,
             relH,
-            gain)
+            gain,
+            command.pedantic(),
+            command.kick().perform_motion_kick(),
+            ballRelX,
+            ballRelY,
+            command.kick().kick_type())
         );
     walkProvider.setCommand(newCommand);
 }
@@ -938,17 +954,16 @@ void MotionModule::sendMotionCommand(messages::DestinationWalk command)
 void MotionModule::sendMotionCommand(messages::OdometryWalk command)
 {
     // Message is coming from behaviors in centimeters and degrees
-    // StepCommands take millimeters and radians so Convert!
+    // StepCommands take millimeters and radians so convert!
     float relX = command.rel_x() * CM_TO_MM;
     float relY = command.rel_y() * CM_TO_MM;
     float relH = command.rel_h() * TO_RAD;
 
-    // For now go at half speed for odometry walk
-    // @TODO major refactoring on all dis shit. lets make it hot
-    float DEFAULT_SPEED = .5f;
-    float gain = DEFAULT_SPEED;
+    float gain; 
     if(command.gain() > 0.f)
         gain = command.gain();
+    else
+        gain = DEFAULT_SPEED;
 
     nextProvider = &walkProvider;
     StepCommand::ptr newCommand(
@@ -1221,6 +1236,16 @@ void MotionModule::updateStatus()
     status.get()->set_calibrated(calibrated());
 
     motionStatusOutput_.setMessage(status);
+}
+
+void MotionModule::updateHandSpeeds()
+{
+    portals::Message<messages::HandSpeeds> current(0);
+
+    current.get()->set_left_speed(walkProvider.leftHandSpeed());
+    current.get()->set_right_speed(walkProvider.rightHandSpeed());
+
+    handSpeedsOutput_.setMessage(current);
 }
 
 } // namespace motion

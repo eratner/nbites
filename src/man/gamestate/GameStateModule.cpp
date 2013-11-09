@@ -13,7 +13,14 @@ GameStateModule::GameStateModule(int team, int player) :
     gameStateOutput(base()),
     gcResponseOutput(base()),
     team_number(team),
-    player_number(player)
+    player_number(player),
+    last_button(false),
+    last_initial(false),
+    last_team(false),
+    last_kickoff(false),
+    response_status(GAMECONTROLLER_RETURN_MSG_ALIVE),
+    keep_time(false),
+    start_time(0)
 {
     reset();
 }
@@ -24,7 +31,6 @@ GameStateModule::~GameStateModule()
 
 void GameStateModule::run_()
 {
-    response_status = GAMECONTROLLER_RETURN_MSG_ALIVE;
     latchInputs();
     update();
 
@@ -83,15 +89,46 @@ void GameStateModule::update()
         if (latest_data.state() != STATE_PLAYING)
         {
             keep_time = false;
+            start_time = 0;
         }
         else
         {
             keep_time = true;
+            if (!start_time)
+            {
+                start_time = realtime_micro_time();
+            }
+        }
+        // Did GC get our message yet??
+        for (int i = 0; i < latest_data.team_size(); ++i)
+        {
+            messages::TeamInfo* team = latest_data.mutable_team(i);
+            if (team->team_number() == team_number)
+            {
+                messages::RobotInfo* player = team->mutable_player(player_number-1);
+                if (response_status == GAMECONTROLLER_RETURN_MSG_MAN_PENALISE)
+                {
+                    if(player->penalty())
+                    {
+                        response_status = GAMECONTROLLER_RETURN_MSG_ALIVE;
+                    }
+                }
+                else if (response_status == GAMECONTROLLER_RETURN_MSG_MAN_UNPENALISE)
+                {
+                    if(!player->penalty())
+                    {
+                        response_status == GAMECONTROLLER_RETURN_MSG_ALIVE;
+                    }
+                }
+            }
         }
     }
-    if (keep_time)
+    if (keep_time && commInput.message().have_remote_gc())
     {
-        // @TODO: keep track of secs remaining if we have no comm.
+        long long diff_time = realtime_micro_time() - start_time;
+        latest_data.set_secs_remaining(600 -
+            static_cast<unsigned int>(diff_time/MICROS_PER_SECOND));
+        //TODO keep track of penalty times
     }
 }
 
@@ -108,6 +145,7 @@ void GameStateModule::advanceState()
     case STATE_SET:
         latest_data.set_state(STATE_PLAYING);
         keep_time = true;
+        start_time = realtime_micro_time();
         break;
     case STATE_PLAYING:
         manual_penalize();
@@ -117,8 +155,7 @@ void GameStateModule::advanceState()
 
 void GameStateModule::manual_penalize()
 {
-    int i;
-    for (i = 0; i < latest_data.team_size(); ++i)
+    for (int i = 0; i < latest_data.team_size(); ++i)
     {
         messages::TeamInfo* team = latest_data.mutable_team(i);
         if (team->team_number() == team_number)
@@ -126,13 +163,15 @@ void GameStateModule::manual_penalize()
             messages::RobotInfo* player = team->mutable_player(player_number-1);
             if (player->penalty())
             {
-                player->set_penalty(PENALTY_NONE);
                 response_status = GAMECONTROLLER_RETURN_MSG_MAN_UNPENALISE;
+                if (!commInput.message().have_remote_gc())
+                    player->set_penalty(PENALTY_NONE);
             }
             else
             {
-                player->set_penalty(PENALTY_MANUAL);
                 response_status = GAMECONTROLLER_RETURN_MSG_MAN_PENALISE;
+                if (!commInput.message().have_remote_gc())
+                    player->set_penalty(PENALTY_MANUAL);
             }
             break;
         }
@@ -143,6 +182,14 @@ void GameStateModule::reset()
 {
     keep_time = false;
     latest_data.Clear();
+
+    latest_data.set_state(STATE_INITIAL);
+    latest_data.set_kick_off_team(TEAM_BLUE);
+    latest_data.set_secondary_state(STATE2_NORMAL);
+    latest_data.set_drop_in_team(TEAM_BLUE);
+
+    latest_data.set_have_remote_gc(false);
+
     messages::TeamInfo* myTeam = latest_data.add_team();
     myTeam->set_team_number(team_number);
     myTeam->set_team_color(TEAM_BLUE);
@@ -154,6 +201,7 @@ void GameStateModule::reset()
     }
 
     messages::TeamInfo* them = latest_data.add_team();
+    them->set_team_number(0);
     them->set_team_color(TEAM_RED);
     them->set_goal_color(GOAL_YELLOW);
     for (int i = 0; i < NUM_PLAYERS_PER_TEAM; ++i)

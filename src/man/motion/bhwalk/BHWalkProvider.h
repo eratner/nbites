@@ -35,9 +35,14 @@ namespace man
             // Provide calibration boolean to the rest of the system.
             bool calibrated() const;
 
+            // Provide hand speeds to the rest of the system
+            float leftHandSpeed() const;
+            float rightHandSpeed() const;
+
             void requestStopFirstInstance();
             void calculateNextJointsAndStiffnesses(
                 std::vector<float>&            sensorAngles,
+                std::vector<float>&            sensorCurrents,
                 const messages::InertialState& sensorInertials,
                 const messages::FSR&           sensorFSRs
                 );
@@ -56,7 +61,6 @@ namespace man
             }
 
             void getOdometryUpdate(portals::OutPortal<messages::RobotLocation>& out) const;
-            virtual const SupportFoot getSupportFoot() const;
 
             static const float INITIAL_BODY_POSE_ANGLES[Kinematics::NUM_JOINTS];
             //returns only body angles

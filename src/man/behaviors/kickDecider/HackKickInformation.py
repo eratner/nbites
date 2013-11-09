@@ -2,9 +2,11 @@ import kicks
 import objects as Objects
 import noggin_constants as constants
 import math
+from ..util import MyMath
 
-DEBUG_KICK_DECISION = False
+DEBUG_KICK_DECISION = True
 USE_LOC = True
+STRAIGHT_KICK_BIAS = 10
 
 class KickInformation:
     """
@@ -139,11 +141,11 @@ class KickInformation:
         if not self.haveData:
             return
 
-        if DEBUG_KICK_DECISION:
-            print "Total far goal sightings (sum both posts): ",\
-                len(self.farGoalLeftPostBearings)+len(self.farGoalRightPostBearings)
-            print "Total near goal sightings (sum both posts): ",\
-                len(self.nearGoalLeftPostBearings)+len(self.nearGoalRightPostBearings)
+        # if DEBUG_KICK_DECISION:
+        #     print "Total far goal sightings (sum both posts): ",\
+        #         len(self.farGoalLeftPostBearings)+len(self.farGoalRightPostBearings)
+        #     print "Total near goal sightings (sum both posts): ",\
+        #         len(self.nearGoalLeftPostBearings)+len(self.nearGoalRightPostBearings)
 
         # bearing averages
         # Need more than 7 frames of each post to consider it "real".
@@ -190,9 +192,9 @@ class KickInformation:
         elif self.nearRightPostBearing is not None:
             self.nearAvgPostDist = self.nearRightPostDist
 
-        if DEBUG_KICK_DECISION:
-            print "near reds: ",self.nearGoalieRed
-            print "near navys: ",self.nearGoalieNavy
+        # if DEBUG_KICK_DECISION:
+        #     print "near reds: ",self.nearGoalieRed
+        #     print "near navys: ",self.nearGoalieNavy
 
         # Determine visual dangerous goalie
         # Note that the values should be double the sightings:
@@ -225,15 +227,18 @@ class KickInformation:
         """
         kick = None
 
-        if DEBUG_KICK_DECISION:
-            print "In method shoot."
-
         # Is loc good enough for a kick decision?
         # Need to use aimCenter in decision.
         if USE_LOC:
-
-            if DEBUG_KICK_DECISION:
-                print "Flag is set: using loc for decision."
+            # COMPETITION HACK -- dribbling from the corner
+            if (self.brain.ball.x > constants.FIELD_WHITE_RIGHT_SIDELINE_X - 65 and
+                (self.brain.ball.y < constants.LANDMARK_OPP_GOAL_RIGHT_POST_Y - 30 or
+                 self.brain.ball.y > constants.LANDMARK_OPP_GOAL_LEFT_POST_Y + 30)):
+                self.brain.player.corner_dribble = True
+                kick = self.chooseShortFrontKick()
+                kick.h = self.brain.loc.headingTo(Objects.Location(constants.YELLOW_GOALBOX_LEFT_X - 100,
+                                                                   constants.MIDFIELD_Y))
+                return kick
 
             # Get the bearing for the shot, i.e. from the ball to the goal.
             # Note: currently always aimCenter
@@ -245,6 +250,8 @@ class KickInformation:
                                           constants.LANDMARK_OPP_GOAL_RIGHT_POST_Y)
 
             ballLocation = Objects.Location(self.brain.ball.x, self.brain.ball.y)
+            closeShot = (self.brain.loc.distTo(goalCenter) < 100) # within 1 meter
+            ourHalf = (self.brain.loc.x < constants.MIDFIELD_X) # on our half of the field
 
             headingBallToGoalCenter = ballLocation.headingTo(goalCenter)
             headingBallToGoalLeft   = ballLocation.headingTo(goalLeft)
@@ -256,41 +263,150 @@ class KickInformation:
 
             # Assume our heading at the ball will equal our current heading
             # We shouldn't be spinning at this point, so the assumption is valid.
-            # Note: both headings are in degrees at this point.
+            # Note: all headings are in degrees at this point.
             bearingForKick = headingBallToGoalCenter - self.brain.loc.h
+            bearingKickLeft = headingBallToGoalLeft - self.brain.loc.h
+            bearingKickRight = headingBallToGoalRight - self.brain.loc.h
+
             bearingLimitLeft = headingBallToGoalLeft - headingBallToGoalCenter
             bearingLimitRight = headingBallToGoalRight - headingBallToGoalCenter
 
-            if DEBUG_KICK_DECISION:
-                print ("Acceptable bearing range for kick: " + str(bearingLimitLeft/2) +
-                       "/" + str(bearingLimitRight/2))
+            if not closeShot:
 
-            if bearingForKick < 35 and bearingForKick > -35:
-                #choose straight kick!
-                kick = self.chooseQuickFrontKick()
-                kick.h = 0 - bearingForKick
-            elif bearingForKick > 35 and bearingForKick < 125:
-                #choose a right side kick! (using right foot)
-                kick = kicks.RIGHT_SIDE_KICK
-                kick.h = 70 - bearingForKick
-            elif bearingForKick < -35 and bearingForKick > -125:
-                #choose a left side kick! (using left foot)
-                kick = kicks.LEFT_SIDE_KICK
-                kick.h = -70 - bearingForKick
-            else:
-                #choose a back kick!
-                kick = self.chooseBackKick()
-                if bearingForKick < -125:
-                    kick.h = -180 - bearingForKick
+                if DEBUG_KICK_DECISION:
+                    print ("Acceptable bearing range for kick: " + str(headingBallToGoalLeft) +
+                           "/" + str(headingBallToGoalRight))
+
+                kickBearings = [[0, 0], [70, 0], [-70, 0]] # straight, right side, left side
+                for b in kickBearings:
+                    adjustedBearingLeft = bearingKickLeft - b[0]
+                    adjustedBearingRight = bearingKickRight - b[0]
+
+                    if adjustedBearingLeft > 0 and adjustedBearingRight < 0:
+                        #goal is in front of us
+                        b[1] = 0
+                    elif adjustedBearingLeft < 0 and adjustedBearingRight > 0:
+                        #goal is behind us
+                        if math.fabs(adjustedBearingLeft) < math.fabs(adjustedBearingRight):
+                            #use the left bearing
+                            b[1] = -adjustedBearingLeft
+                        else:
+                            #use the right bearing
+                            b[1] = -adjustedBearingRight
+                    elif adjustedBearingRight > 0:
+                        #goal is to our left
+                        b[1] = -adjustedBearingRight
+                    elif adjustedBearingLeft < 0:
+                        #goal is to our right
+                        b[1] = -adjustedBearingLeft
+
+                sortedBearings = sorted(map(math.fabs, [x[1] for x in kickBearings]))
+
+                if sortedBearings[0] < math.fabs(kickBearings[0][1]) - STRAIGHT_KICK_BIAS:
+                    # side kicks must beat straight kick by more than ~10 degrees
+                    if sortedBearings[0] == math.fabs(kickBearings[1][1]):
+                        # choose a right side kick
+                        kick = kicks.RIGHT_SIDE_KICK
+                    elif sortedBearings[0] == math.fabs(kickBearings[2][1]):
+                        # choose a left side kick
+                        kick = kicks.LEFT_SIDE_KICK
                 else:
-                    kick.h = 180 - bearingForKick
+                    # choose a straight kick
+                    kick = self.chooseShortFrontKick()
 
-            # If we're already close enough to the correct bearing to score, don't orbit.
-            if bearingForKick < bearingLimitLeft/2 and bearingForKick > bearingLimitRight/2:
-                kick.h = 0
+                kick.h = sortedBearings[0]
+
+                # If we're defending near our goal box, just kick it: clearing the ball
+                # is more important than being super accurate.
+                if (self.brain.loc.x < constants.LANDMARK_MY_FIELD_CROSS[0] and
+                    self.brain.loc.y < constants.MY_GOALBOX_TOP_Y and
+                    self.brain.loc.y > constants.MY_GOALBOX_BOTTOM_Y):
+                    kick.h = 0
+            else: # if closeShot is True
+                if DEBUG_KICK_DECISION:
+                    print "I am shooting very close to the opponent's goal."
+
+                if DEBUG_KICK_DECISION:
+                    print ("Acceptable bearing range for kick: " + str(headingBallToGoalLeft) +
+                           "/" + str(headingBallToGoalRight))
+
+                if (bearingKickLeft - bearingKickRight) > 60:
+                    # even an inaccurate straight kick will work
+                    if (30 < bearingKickLeft and -30 > bearingKickLeft):
+                        #choose a straight motion kick with no orbit NOW!
+                        kick = self.chooseFrontMotionKick()
+                        kick.h = 0
+                        return kick
+                    elif (bearingKickLeft < 30):
+                        # closer to left limit
+                        straightBearing = 30 - bearingKickLeft
+                    else: #assert bearingLimitRight > -30
+                        # closer to right limit
+                        straightBearing = -30 - bearingKickRight
+                else:
+                    # aim for the center and hope we're accurate enough
+                    straightBearing = 0 - bearingForKick
+
+                if (bearingKickLeft - bearingKickRight > 35):
+                    # even an inaccurate side kick will work
+                    if (90 < bearingKickLeft and 60 > bearingKickRight):
+                        #choose a right side motion kick with no orbit NOW!
+                        self.brain.player.motionKick = True
+                        kick = kicks.M_RIGHT_SIDE
+                        kick.h = 0
+                        return kick
+                    elif (-60 < bearingKickLeft and -90 > bearingKickRight):
+                        #choose a left side kick with no orbit!
+                        self.brain.player.motionKick = True
+                        kick = kicks.M_LEFT_SIDE
+                        kick.h = 0
+                        return kick
+
+                    if (bearingKickLeft < 90):
+                        # right side kick is closer to left limit
+                        rightSideBearing = 90 - bearingKickLeft
+                    else: #assert bearingKickRight > 60
+                        rightSideBearing = 60 - bearingKickRight
+
+                    if (bearingKickLeft < -60):
+                        # left side kick is closer to the left limit
+                        leftSideBearing = -60 - bearingKickLeft
+                    else: #assert bearingKickRight > -90
+                        leftSideBearing = -90 - bearingKickRight
+                else:
+                    # aim for the center and hope we're accurate enough
+                    rightSideBearing = 70 - bearingForKick
+                    leftSideBearing = -70 - bearingForKick
+
+                # Currently, we ignore the possibility of doing a back kick here.
+
+                # make sure all the kick bearings are sub-180 angles
+                straightBearing = MyMath.sub180Angle(straightBearing)
+                rightSideBearing = MyMath.sub180Angle(rightSideBearing)
+                leftSideBearing = MyMath.sub180Angle(leftSideBearing)
+
+                # the kick bearing that has least magnitude should be chosen
+                kickList = sorted([straightBearing, leftSideBearing, rightSideBearing], key=math.fabs)
+
+                if math.fabs(kickList[0]) < math.fabs(straightBearing) - STRAIGHT_KICK_BIAS:
+                    # side kicks must beat straight kicks by more than ~10 degrees
+                    if (kickList[0] == rightSideBearing):
+                        kick = kicks.RIGHT_SIDE_KICK
+                        kick.h = rightSideBearing
+                    elif (kickList[0] == leftSideBearing):
+                        kick = kicks.LEFT_SIDE_KICK
+                        kick.h = leftSideBearing
+                else:
+                    # choose a straight kick
+                    kick = self.chooseFrontMotionKick()
+                    kick.h = straightBearing
+
+
+            # Convert kick.h to be a desired global heading for the orbit.
+            kick.h = self.brain.loc.h - kick.h
 
             # Make sure heading is an int before passing it to the orbit.
-            kick.h = int(kick.h)
+            kick.h = int(MyMath.sub180Angle(kick.h))
 
             if DEBUG_KICK_DECISION:
                 print "Returning a kick with heading: " + str(kick.h)
@@ -547,6 +663,7 @@ class KickInformation:
         # Assert: I have my global heading and coordinates of the ball.
 
         if DEBUG_KICK_DECISION:
+            print "chose a clear kick."
             print "myGlobalHeading: ",myGlobalHeading
             print "ballX: ",ballX
             print "ballY: ",ballY
@@ -623,6 +740,12 @@ class KickInformation:
             return kicks.LEFT_SHORT_STRAIGHT_KICK
         return kicks.RIGHT_SHORT_STRAIGHT_KICK
 
+    def chooseFrontMotionKick(self):
+        self.brain.player.motionKick = True
+        if self.kickWithLeftFoot():
+            return kicks.M_LEFT_STRAIGHT
+        return kicks.M_RIGHT_STRAIGHT
+
     def chooseQuickFrontKick(self):
         # If our goalie is inactive, always use short front kicks.
         # If we are using loc-based kicks, ignore the above.
@@ -632,8 +755,8 @@ class KickInformation:
                     return self.chooseShortFrontKick()
 
         if self.kickWithLeftFoot():
-            return kicks.LEFT_STRAIGHT_KICK
-        return kicks.RIGHT_STRAIGHT_KICK
+            return kicks.LEFT_SHORT_STRAIGHT_KICK
+        return kicks.RIGHT_SHORT_STRAIGHT_KICK
 
     def chooseBackKick(self):
         """
@@ -657,8 +780,7 @@ class KickInformation:
         How we choose which kick to do when we're facing the ball. For now,
         simply pick the foot that's closer to the ball.
         """
-        if self.brain.ball.bearing_deg > 0: # TODO should be relY but
-            # no message for it yet.
+        if self.brain.ball.stat_rel_y > 0:
             return True
         else:
             return False

@@ -24,6 +24,12 @@ class Kick(object):
                 self is LEFT_SHORT_BACK_KICK or
                 self is RIGHT_SHORT_BACK_KICK)
 
+    def isStraightKick(self):
+        return (self is LEFT_STRAIGHT_KICK or
+                self is RIGHT_STRAIGHT_KICK or
+                self is LEFT_SHORT_STRAIGHT_KICK or
+                self is RIGHT_SHORT_STRAIGHT_KICK)
+
     def __str__(self):
         #return ("%s: \n x_offset: %g y_offset: %g heading: %g ==> dest: %s" %
          #       (self.name, self.x_offset, self.y_offset, self.heading, self.dest))
@@ -35,13 +41,13 @@ class Kick(object):
     def __ne__(self, other):
         return not self == other
 
+
 # Some standard kicks. x,y and move should not be modified unless you change
 # the sweetMove.  Heading will be modified when the kick is constructed.
-
-LEFT_SIDE_KICK =  Kick("L_Side", x = 15.5, y =  -.5,
-                       move=SweetMoves.LEFT_SIDE_KICK)
-RIGHT_SIDE_KICK = Kick("R_Side", x = 15.5, y = .5,
-                       move=SweetMoves.RIGHT_SIDE_KICK)
+LEFT_SIDE_KICK =  Kick("L_Side", x = 17.5, y =  2,
+                       move=SweetMoves.GOOGZ_LEFT_SIDE_KICK)
+RIGHT_SIDE_KICK = Kick("R_Side", x = 17.5, y = -2,
+                       move=SweetMoves.GOOGZ_RIGHT_SIDE_KICK)
 # Not used 04-19-13
 LEFT_SHORT_SIDE_KICK =  Kick("L_Short_Side", x = 15.5, y = -.5,
                              move=SweetMoves.LEFT_SHORT_SIDE_KICK)
@@ -52,16 +58,10 @@ LEFT_STRAIGHT_KICK =  Kick("L_Straight", x = 16.5, y = 5.0,
 RIGHT_STRAIGHT_KICK = Kick("R_Straight", x = 16.5, y = -5.0,
                            move=SweetMoves.RIGHT_STRAIGHT_KICK)
 
-LEFT_SHORT_STRAIGHT_KICK =  Kick("L_Short_Straight", x = 16.0, y =  4.9,
+LEFT_SHORT_STRAIGHT_KICK =  Kick("L_Short_Straight", x = 18.7, y =  4.4,
                                  move=SweetMoves.LEFT_SHORT_STRAIGHT_KICK)
-RIGHT_SHORT_STRAIGHT_KICK = Kick("R_Short_Straight", x = 16.0, y = -4.9,
+RIGHT_SHORT_STRAIGHT_KICK = Kick("R_Short_Straight", x = 18.7, y = -4.4,
                                  move=SweetMoves.RIGHT_SHORT_STRAIGHT_KICK)
-
-# Not used 04-19-13
-LEFT_QUICK_STRAIGHT_KICK =  Kick("L_Quick_Straight", x = 15, y = 5.5,
-                                 move=SweetMoves.LEFT_QUICK_STRAIGHT_KICK)
-RIGHT_QUICK_STRAIGHT_KICK = Kick("R_Quick_Straight", x = 15, y = -5.5,
-                                 move=SweetMoves.RIGHT_QUICK_STRAIGHT_KICK)
 
 # Not used 04-19-13
 LEFT_BIG_KICK =  Kick("L_Big_Straight", x = 11, y =  3,
@@ -83,26 +83,43 @@ LEFT_SHORT_BACK_KICK =  Kick("L_Short_Back", x = 16.8, y =  4,
 RIGHT_SHORT_BACK_KICK = Kick("R_Short_Back", x = 16.8, y = -4,
                              move=SweetMoves.RIGHT_SHORT_BACK_KICK)
 
+# Dribble kick just tells player to run thru the ball, no actual sweet move
+LEFT_DRIBBLE =  Kick("L_Dribble", x = 0, y = 3.0)
+RIGHT_DRIBBLE =  Kick("R_Dribble", x = 0, y = -3.0)
+
+# Motion kicks
+M_LEFT_SIDE =  Kick("M_Left_Side", x = 11, y = 1.5)
+M_RIGHT_SIDE =  Kick("M_Right_Side", x = 11, y = -1.5)
+
+M_LEFT_STRAIGHT =  Kick("M_Left_Straight", x = 15, y = 5.0)
+M_RIGHT_STRAIGHT =  Kick("M_Right_Straight", x = 15, y = -5.0)
+
 def chooseAlignedKickFromKick(player, kick):
-    ballRelY = player.brain.ball.rel_y
+    ballRelY = player.brain.ball.stat_rel_y
     if (kick == LEFT_STRAIGHT_KICK or
         kick == RIGHT_STRAIGHT_KICK):
         if ballRelY > 0:
             return LEFT_STRAIGHT_KICK
         else:
             return RIGHT_STRAIGHT_KICK
+    elif (kick == M_LEFT_STRAIGHT or
+        kick == M_RIGHT_STRAIGHT):
+        if ballRelY > 0:
+            return M_LEFT_STRAIGHT
+        else:
+            return M_RIGHT_STRAIGHT
+    elif (kick == LEFT_DRIBBLE or
+        kick == RIGHT_DRIBBLE):
+        if ballRelY > 0:
+            return LEFT_DRIBBLE
+        else:
+            return RIGHT_DRIBBLE
     elif (kick == LEFT_SHORT_STRAIGHT_KICK or
           kick == RIGHT_SHORT_STRAIGHT_KICK):
         if ballRelY > 0:
             return LEFT_SHORT_STRAIGHT_KICK
         else:
             return RIGHT_SHORT_STRAIGHT_KICK
-    elif (kick == LEFT_QUICK_STRAIGHT_KICK or
-          kick == RIGHT_QUICK_STRAIGHT_KICK):
-        if ballRelY > 0:
-            return LEFT_QUICK_STRAIGHT_KICK
-        else:
-            return RIGHT_QUICK_STRAIGHT_KICK
     elif (kick == LEFT_BIG_KICK or
           kick == RIGHT_BIG_KICK):
         if ballRelY > 0:

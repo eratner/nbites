@@ -21,6 +21,9 @@
 #include "motion/MotionModule.h"
 #include "gamestate/GameStateModule.h"
 #include "localization/LocalizationModule.h"
+#include "sharedball/SharedBall.h"
+#include "arms/ArmContactModule.h"
+#include "obstacle/ObstacleModule.h"
 
 #include <vector>
 
@@ -42,6 +45,7 @@ private:
     sensors::SensorsModule sensors;
     jointenactor::JointEnactorModule jointEnactor;
     motion::MotionModule motion;
+    arms::ArmContactModule arms;
 
     DiagramThread guardianThread;
     guardian::GuardianModule guardian;
@@ -58,9 +62,11 @@ private:
     vision::VisionModule vision;
     localization::LocalizationModule localization;
     balltrack::BallTrackModule ballTrack;
+    obstacle::ObstacleModule obstacle;
     gamestate::GameStateModule gamestate;
     behaviors::BehaviorsModule behaviors;
     led::LedEnactorModule leds;
+    context::SharedBallModule sharedBall;
 };
 
 }

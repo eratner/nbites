@@ -36,17 +36,19 @@ using namespace NBMath;
 namespace man{
 namespace balltrack{
 
+static const bool TRACK_MOVEMENT = false;
+
 static const MMKalmanFilterParams DEFAULT_MM_PARAMS =
 {
-    2,                 // numFilters
+    2,                  // numFilters
     500,                // framesTillReset
     10.f,               // initCovX
     10.f,               // initCovY
     25.f,               // initCovVelX
     25.f,               // initCovVelY
-    15.f,                 // threshold for ball is moving!
-    4,                   // buffer size
-    30.f                 // badStationaryThresh
+    35.f,               // threshold for ball is moving!
+    7,                  // buffer size
+    30.f                // badStationaryThresh
 };
 
 class MMKalmanFilter
@@ -74,10 +76,23 @@ public:
     float getFilteredDist(){return filters.at((unsigned)bestFilter)->getFilteredDist();};
     float getFilteredBear(){return filters.at((unsigned)bestFilter)->getFilteredBear();};
 
-    float getSpeed(){return filters.at((unsigned)bestFilter)->getSpeed();};
-    float getRelXDest(){return filters.at((unsigned)bestFilter)->getRelXDest();};
-    float getRelYDest(){return filters.at((unsigned)bestFilter)->getRelYDest();};
-    float getRelYIntersectDest(){return filters.at((unsigned)bestFilter)->getRelYIntersectDest();};
+    float getSpeed(){return filters.at((unsigned)1)->getSpeed();};
+    float getRelXDest(){return filters.at((unsigned)1)->getRelXDest();};
+    float getRelYDest(){return filters.at((unsigned)1)->getRelYDest();};
+    float getRelYIntersectDest(){return filters.at((unsigned)1)->getRelYIntersectDest();};
+
+    float getStationaryRelX(){return filters.at((unsigned) 0)->getRelXPosEst();};
+    float getStationaryRelY(){return filters.at((unsigned) 0)->getRelYPosEst();};
+    float getStationaryDistance(){return filters.at((unsigned) 0)->getFilteredDist();};
+    float getStationaryBearing() {return filters.at((unsigned) 0)->getFilteredBear();};
+
+    float getMovingRelX(){return filters.at((unsigned) 1)->getRelXPosEst();};
+    float getMovingRelY(){return filters.at((unsigned) 1)->getRelYPosEst();};
+    float getMovingVelX(){return filters.at((unsigned) 1)->getRelXVelEst();};
+    float getMovingVelY(){return filters.at((unsigned) 1)->getRelYVelEst();};
+    float getMovingDistance(){return filters.at((unsigned) 1)->getFilteredDist();};
+    float getMovingBearing() {return filters.at((unsigned) 1)->getFilteredBear();};
+    float getMovingSpeed() {return calcSpeed(getMovingVelX(), getMovingVelY());};
 
     bool isStationary(){return stationary;};
 
@@ -103,9 +118,6 @@ private:
 
     void updatePredictions();
 
-    void cycleFilters();
-
-    unsigned normalizeFilterWeights();
     void updateDeltaTime();
 
     CartesianObservation calcVelocityOfBuffer();

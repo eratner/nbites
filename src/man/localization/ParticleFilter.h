@@ -23,6 +23,7 @@
 #include <vector>
 #include <iostream>
 #include <map>
+#include <cmath>
 
 #include <boost/shared_ptr.hpp>
 #include <boost/random.hpp>
@@ -35,19 +36,19 @@ namespace man
 namespace localization
 {
 
-const float LOST_THRESHOLD = 50;
-const float ALPHA = .05f; // Impact for ~76 frames
+const float LOST_THRESHOLD  = 10.f;
+const float ALPHA = .07f; // Impact for ~76 frames
 
 // Define the default parameters for the Particle Filter
 static const ParticleFilterParams DEFAULT_PARAMS =
 {
     FIELD_GREEN_HEIGHT,         // Field Height
     FIELD_GREEN_WIDTH,          // Field Width
-    200,                        // Num Particles
+    300,                        // Num Particles
     0.2f,                       // Exponential Filter alpha
     0.05f,                      //                    beta
-    .25f,                        // Variance in x-y odometry
-    .03f                         // Variance in h odometry
+    .1f,                        // Variance in x-y odometry
+    .04f                         // Variance in h odometry
 };
 
 /**
@@ -68,7 +69,12 @@ public:
      *  @brief Given a new motion and vision input, update the filter
      */
     void update(const messages::RobotLocation& motionInput,
-                const messages::VisionField& visionInput);
+                const messages::VisionField&   visionInput);
+
+    // Overload to use ball info
+    void update(const messages::RobotLocation& motionInput,
+                const messages::VisionField&   visionInput,
+                const messages::FilteredBall&    ballInput);
 
     float getMagnitudeError();
 
@@ -159,7 +165,11 @@ private:
     bool updatedVision;
 
     bool lost;
+    bool badFrame;
     float errorMagnitude;
+
+    int framesSinceReset;
+    int setResetTransition;
 
     // For use when logging particle swarm
     messages::ParticleSwarm swarm;

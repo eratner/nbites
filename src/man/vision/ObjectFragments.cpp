@@ -381,7 +381,7 @@ void ObjectFragments::vertScan(int x, int y, int dir, int stopper,
         if (Utility::colorsEqual(pixel, c)) {
 			// when we're below the horizon ignore bluegreen
 			good++;
-			if (c != BLUE_BIT || dir != 1) {
+			if (dir != 1) {
 				bad--;
 			}
 			run++;
@@ -1455,6 +1455,25 @@ int ObjectFragments::classifyByOuterL(Blob post, VisualCorner & corner) {
 		cout << "Checking outer L corner " << l1 << " " << l2 << " " <<
 			dist << endl;
 	}
+	// Let's try the hardest case first - we are in the corner of the field
+	// looking at the side of the goal
+	if (x > post.getRight() &&
+		corner.getLine1()->getLeftEndpoint().x > post.getRight() &&
+		corner.getLine2()->getLeftEndpoint().x > post.getRight()) {
+		if (POSTLOGIC) {
+			cout << "Corner lines completely to right of post, we are at corner" << endl;
+		}
+		return LEFT;
+	} else if (x < post.getLeft() &&
+		corner.getLine1()->getRightEndpoint().x < post.getLeft() &&
+		corner.getLine2()->getRightEndpoint().x < post.getLeft()) {
+		if (POSTLOGIC) {
+			cout << "Corner lines completely to left of post, we are at corner" << endl;
+		}
+		return RIGHT;
+	}
+
+
 	if (abs(corner.getOrientation()) < 90) {
 		int classification = NOPOST;
 		if (l1 > l2 && l1 > GOALBOX_DEPTH + 40.0f) {
@@ -2189,7 +2208,7 @@ void ObjectFragments::updateRunsAfterFirstPost(Blob pole, int post) {
  * @param right		  the right post
  * @param mid		  the backstop
  * @param c			  the color we're processing
- * @param c2		  the soft color closest to it (e.g. bluegreen for blue)
+ * @param c2		  the soft color closest to it
  */
 // Look for posts and goals given the runs we've collected
 void ObjectFragments::lookForFirstPost(VisualFieldObject* left,
@@ -2225,7 +2244,14 @@ void ObjectFragments::lookForFirstPost(VisualFieldObject* left,
                          pole.getRight() + POST_NEAR_DIST, secondPost);
 
 	int post;
-	if (isPostReasonableSizeShapeAndPlace(secondPost)) {
+	if (vision->thresh->usingTopCamera &&
+		isPostReasonableSizeShapeAndPlace(secondPost) && secondPost.width() > 2) {
+		if (POSTLOGIC) {
+			cout << "Second post " << endl;
+			drawBlob(secondPost, BLUE);
+			printBlob(secondPost);
+			printBlob(pole);
+		}
 		if (pole.getLeftBottomX() < secondPost.getLeftBottomX()) {
 			post = LEFT;
 		} else {
@@ -2235,25 +2261,9 @@ void ObjectFragments::lookForFirstPost(VisualFieldObject* left,
 		post = classifyFirstPost(c, pole);
 	}
 
-
-
     dc = checkDist(pole);
     // first characterize the size of the possible post
     int howbig = characterizeSize(pole);
-    // now see if we can figure out whether it is a right or left post
-    //int post = classifyFirstPost(c, pole);
-
-	if (post != LEFT && post != RIGHT && isItAPost) {
-        if (POSTDEBUG)
-        {
-            cout << "Using extra post" << endl;
-        }
-		if (pole.getLeftBottomX() < secondPost.getLeftBottomX()) {
-			post = LEFT;
-		} else {
-			post = RIGHT;
-		}
-	}
 
 	// make sure the post is down to the level of the field edge
 	if (pole.getLeftBottomY() < horizonAt(pole.getLeftBottomX())) {
@@ -2299,7 +2309,7 @@ void ObjectFragments::lookForFirstPost(VisualFieldObject* left,
  * @param right		  the right post
  * @param mid		  the backstop
  * @param c			  the color we're processing
- * @param c2		  the soft color closest to it (e.g. bluegreen for blue)
+ * @param c2		  the soft color closest to it
  */
 void ObjectFragments::lookForSecondPost(Blob pole, int post,
                                         VisualFieldObject* left,
@@ -2327,10 +2337,12 @@ void ObjectFragments::lookForSecondPost(Blob pole, int post,
         if (questions) {
             if (post == LEFT) {
                 if (right->getIDCertainty() != _SURE) {
+					printBlob(pole);
                     right->init();
                 }
             } else {
                 if (left->getIDCertainty() != _SURE) {
+					printBlob(pole);
                     left->init();
                 }
             }
@@ -2651,7 +2663,7 @@ bool ObjectFragments::locationOk(Blob b)
 		}
 		return false;
 	}
-    if (!horizonBottomOk(spanX, spanY, mh, trueLeft, trueRight, trueBottom,
+    /*if (!horizonBottomOk(spanX, spanY, mh, trueLeft, trueRight, trueBottom,
                          trueTop)) {
         if (!greenCheck(b) || mh - trueBottom > spanY || spanX < MIN_WIDTH ||
             mh - trueBottom > ALLOWABLE_HORIZON_DIFF) {
@@ -2667,7 +2679,7 @@ bool ObjectFragments::locationOk(Blob b)
             }
         } else {
         }
-    }
+		}*/
     return true;
 }
 
@@ -2820,6 +2832,9 @@ bool ObjectFragments::relativeSizesOk(Blob post1, Blob post2) {
                                                           post2.width()))) {
         return true;
     }
+	if (withinMarginInt(post1.height(), post2.height(), post1.height() / 3)) {
+		return true;
+    }
 	if (post1.height() > 100 && post2.height() > 100) {
 		return true;
 	}
@@ -2838,6 +2853,11 @@ bool ObjectFragments::relativeSizesOk(Blob post1, Blob post2) {
                 return true;
             }
         }
+		// We worry more about posts that are too close than too far
+		if (abs(x1 - x2) > post1.height() / 2 &&
+			withinMargin(dist, CROSSBAR_CM_WIDTH, fudge * 3)) {
+			return true;
+		}
 		if (abs(e.dist - e1.dist) < 100.0f && abs(x1 -x2) > IMAGE_WIDTH / 4 &&
 			dist < CROSSBAR_CM_WIDTH + fudge * 3) {
 			return true;

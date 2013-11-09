@@ -19,6 +19,8 @@ if( BUILD_PROTOBUF )
   include( ${SHARE_DIR}/cmake/BuildProtobuf.cmake )
 endif()
 
+include ( ${SHARE_DIR}/cmake/BuildGTest.cmake )
+
 include( ${SHARE_DIR}/cmake/DebugConfig.cmake)
 
 # Configure the debug options
@@ -36,6 +38,12 @@ configure_file(
   "${MAN_DIR}/cmake/RobotConfig.in"
   "${PROJECT_BINARY_DIR}/RobotConfig.h"
 )
+
+
+if (NOT CMAKE_BUILD_TYPE)
+  message(STATUS "No build type selected, default to RelWithDebInfo")
+  set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+endif()
 
 
 include_directories( ${PROJECT_BINARY_DIR} )
@@ -76,6 +84,7 @@ add_subdirectory( ${MAN_DIR}/support ${CMAKE_CURRENT_BINARY_DIR}/man/support)
 add_subdirectory( ${MAN_DIR}/image ${CMAKE_CURRENT_BINARY_DIR}/man/image)
 add_subdirectory( ${MAN_DIR}/vision ${CMAKE_CURRENT_BINARY_DIR}/man/vision)
 add_subdirectory( ${MAN_DIR}/localization ${CMAKE_CURRENT_BINARY_DIR}/man/localization)
+add_subdirectory( ${MAN_DIR}/balltrack ${CMAKE_CURRENT_BINARY_DIR}/man/balltrack)
 
 # Actual subdirectories!
 add_subdirectory( ${MAN_DIR}/comm ${CMAKE_CURRENT_BINARY_DIR}/man/comm)
@@ -83,8 +92,10 @@ add_subdirectory( unlog )
 add_subdirectory( logview )
 add_subdirectory( image )
 add_subdirectory( colorcreator )
+add_subdirectory( playbook )
 add_subdirectory( vision_offline )
 add_subdirectory( fieldview )
+add_subdirectory( ballview )
 add_subdirectory( common )
 add_subdirectory( worldview )
 add_subdirectory( calibrator )
@@ -96,7 +107,7 @@ set( tool_srcs main.cpp
   ToolDiagram.cpp
   DataSelector.cpp
   Tool.cpp
-  ${MAN_DIR}/DiagramThread.cpp
+  ${MAN_DIR}/DiagramThread.cpp # Needed for worldview
   )
 
 set( tool_headers
@@ -111,6 +122,7 @@ set( loc_srcs loc_main.cpp
   EmptyTool.cpp
   ToolDiagram.cpp
   DataSelector.cpp
+  ${MAN_DIR}/DiagramThread.cpp # Needed for worldview
 
   LocTool.cpp
   )
@@ -121,6 +133,22 @@ set( loc_headers
   DataSelector.h
 
   LocTool.h
+)
+
+set( ball_srcs ball_main.cpp
+  EmptyTool.cpp
+  ToolDiagram.cpp
+  DataSelector.cpp
+
+  BallTool.cpp
+)
+
+set( ball_headers
+  EmptyTool.h
+  ToolDiagram.h
+  DataSelector.h
+
+  BallTool.h
 )
 
 # VisionTool Sources
@@ -157,11 +185,23 @@ set( calibrate_headers
   CalibrationTool.h
 )
 
+set( playbook_srcs playbook_main.cpp
+
+  PlaybookTool.cpp
+  )
+
+set( playbook_headers
+
+  PlaybookTool.h
+)
+
 # Qt4 goodness (aka moc the headers)
 Qt4_wrap_cpp( tool_headers_moc ${tool_headers} )
 Qt4_wrap_cpp( loc_headers_moc ${loc_headers} )
+Qt4_wrap_cpp( ball_headers_moc ${ball_headers} )
 Qt4_wrap_cpp( vision_headers_moc ${vision_headers} )
 Qt4_wrap_cpp( calibrate_headers_moc ${calibrate_headers} )
+Qt4_wrap_cpp( playbook_headers_moc ${playbook_headers} )
 
 ## EXECUTABLES ##
 
@@ -185,6 +225,7 @@ target_link_libraries(
   colorcreator
   vision_offline
   worldview
+  playbook
   ${QT_LIBRARIES}
   )
 
@@ -201,9 +242,27 @@ target_link_libraries(
   image_display
   logview
   fieldview
-  tool_common
   worldview
+  tool_common
   localization
+  ${QT_LIBRARIES}
+  )
+
+# The BallTool executable
+add_executable( ball_tool
+  ${ball_srcs}
+  ${ball_headers_moc} )
+
+target_link_libraries(
+  ball_tool
+  portals
+  messages
+  unlog
+  logview
+  ballview
+  tool_common
+  image_display
+  balltrack
   ${QT_LIBRARIES}
   )
 
@@ -241,5 +300,17 @@ target_link_libraries(
   logview
   image_display
   calibrator
+  ${QT_LIBRARIES}
+)
+
+# The PlaybookTool executable
+add_executable( playbook_tool
+  ${playbook_srcs}
+  ${playbook_headers_moc}
+)
+
+target_link_libraries(
+  playbook_tool
+  playbook
   ${QT_LIBRARIES}
 )

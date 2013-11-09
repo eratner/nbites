@@ -1,5 +1,6 @@
 import ChaseBallTransitions as transitions
 from math import copysign, fabs
+from objects import RelRobotLocation
 
 DEBUG_PENALTY_STATES = False
 OBJ_SEEN_THRESH = 6
@@ -110,35 +111,29 @@ def afterPenalty(player):
         # Yes, when goal_right is less than 0, our goal is to our right.
         # It seems counter intuitive, but that's how it works. -Josh Z
         player.brain.resetLocalizationFromPenalty(player.goal_right < 0)
-        return player.goNow(player.gameState)
-
+        return player.goLater(player.gameState)
 
     return player.stay()
 
-# This state is currently not used as of 6/9/2013
-def penaltyRelocalize(player):
+def postPenaltyChaser(player):
     """
-    Note: This is the old code that I'm using as a back-up in case we can't
-    see any goal posts. It may be possible to make this smarter. -Wils
+    If we come out of penalty directly into chaser, we'll waste
+    time spinning on the side of the field. Instead, if we didn't
+    see the ball during afterPenalty, odometry walk onto the field
+    before spinning.
     """
     if player.firstFrame():
-        player.setWalk(1, 0, 0)
-
-    if player.brain.ball.vis.frames_on >= OBJ_SEEN_THRESH:
+        player.brain.nav.walkTo(RelRobotLocation(200,0,0))
         player.brain.tracker.trackBall()
-        return player.goLater(player.gameState)
+    elif (player.brain.nav.isStopped() or
+          transitions.shouldChaseBall(player)):
+        return player.goLater('chase')
 
-    if player.brain.my.locScore != NogginConstants.locScore.BAD_LOC:
-        player.shouldRelocalizeCounter += 1
-
-        if player.shouldRelocalizeCounter > 30:
-            player.shouldRelocalizeCounter = 0
-            return player.goLater(player.gameState)
-
-    else:
-        player.shouldRelocalizeCounter = 0
-
-    if not player.brain.motion.head_is_active:
-        player.brain.tracker.repeatWidePan()
+    if not player.brain.play.isChaser():
+        # We've role switched out naturally. Go to appropriate state.
+        player.stopWalking() # walkTo is a bit dangerous. do this to be careful.
+        if player.usingBoxPositions:
+            return player.goLater('positionAtHome')
+        return player.goLater('playbookPosition')
 
     return player.stay()

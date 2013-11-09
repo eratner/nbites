@@ -1,9 +1,6 @@
 from . import TrackingConstants as constants
 import HeadMoves
-from objects import RelLocation
 import noggin_constants as NogginConstants
-from ..playbook import PBConstants
-from ..players import GoalieConstants
 import BallModel_proto as BallModel
 
 DEBUG = False
@@ -21,6 +18,17 @@ def tracking(tracker):
         if (tracker.target.vis.frames_off >
             constants.TRACKER_FRAMES_OFF_REFIND_THRESH):
             return tracker.goLater('fullPan')
+
+    return tracker.stay()
+
+def bounceTracking(tracker):
+    """
+    Just like the above, but using a different tracking method.
+    """
+    tracker.helper.bounceTrackBall()
+
+    if tracker.target.vis.frames_off > constants.TRACKER_FRAMES_OFF_REFIND_THRESH:
+        return tracker.goLater('bounceFullPan')
 
     return tracker.stay()
 
@@ -87,6 +95,32 @@ def fullPan(tracker):
     if (isinstance(tracker.target, BallModel.messages.FilteredBall) and
         tracker.brain.ball.vis.frames_on > constants.TRACKER_FRAMES_ON_TRACK_THRESH):
         return tracker.goLater('tracking')
+
+    return tracker.stay()
+
+def bounceFullPan(tracker):
+    """
+    Just like above, but matches with the bounceTracking state instead.
+    """
+    if tracker.firstFrame():
+        # Send the motion request message to stop
+        request = tracker.brain.interface.motionRequest
+        request.stop_head = True
+        request.timestamp = int(tracker.brain.time * 1000)
+        # Smartly start the pan
+        tracker.helper.startingPan(HeadMoves.FIXED_PITCH_PAN)
+
+    if not tracker.brain.motion.head_is_active:
+        # Repeat the pan
+        tracker.helper.executeHeadMove(HeadMoves.FIXED_PITCH_PAN)
+
+    if not isinstance(tracker.target, BallModel.messages.FilteredBall):
+        if tracker.target.on:
+            return tracker.goLater('trackingFieldObject')
+
+    if (isinstance(tracker.target, BallModel.messages.FilteredBall) and
+        tracker.brain.ball.vis.frames_on > constants.TRACKER_FRAMES_ON_TRACK_THRESH):
+        return tracker.goLater('bounceTracking')
 
     return tracker.stay()
 

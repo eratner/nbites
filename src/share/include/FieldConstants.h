@@ -16,14 +16,14 @@ static const float GREEN_PAD_Y = 15.f;
 #else
 static const float FIELD_WHITE_WIDTH = 900.f;
 static const float FIELD_WHITE_HEIGHT = 600.f;
-static const float GREEN_PAD_X = 63.0f;
-static const float GREEN_PAD_Y = 65.0f;
+static const float GREEN_PAD_X = 69.5f;
+static const float GREEN_PAD_Y = 69.5f;
 #endif // USING_LAB_FIELD
 
 static const float LINE_WIDTH = 5.0f;
 
-static const float FIELD_GREEN_WIDTH = FIELD_WHITE_WIDTH + 2.0f * GREEN_PAD_Y;
-static const float FIELD_GREEN_HEIGHT = FIELD_WHITE_HEIGHT + 2.0f * GREEN_PAD_X;
+static const float FIELD_GREEN_WIDTH = FIELD_WHITE_WIDTH + 2.0f * GREEN_PAD_X;
+static const float FIELD_GREEN_HEIGHT = FIELD_WHITE_HEIGHT + 2.0f * GREEN_PAD_Y;
 static const float FIELD_WIDTH = FIELD_GREEN_WIDTH;
 static const float FIELD_HEIGHT = FIELD_GREEN_HEIGHT;
 
@@ -153,8 +153,4 @@ static const float HEADING_UP = 90.0f;
 static const float HEADING_LEFT = 180.0f;
 static const float HEADING_DOWN = -90.0f;
 
-
-
-
 #endif
-

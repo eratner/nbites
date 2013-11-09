@@ -4,6 +4,7 @@ from . import NavConstants as constants
 from . import NavTransitions as navTrans
 from . import NavHelper as helper
 from objects import RobotLocation, RelRobotLocation
+from math import pi, sqrt
 from ..kickDecider import kicks
 from ..util import Transition
 
@@ -22,6 +23,7 @@ KEEP_SAME_SPEED = -1
 #walk speed adapt
 ADAPTIVE = True
 #goTo precision
+PLAYBOOK = (10.0, 10.0, 10)
 GENERAL_AREA = (5.0, 5.0, 20)
 CLOSE_ENOUGH = (3.5, 3.5, 10)
 PRECISELY = (1.0, 1.0, 5)
@@ -29,7 +31,7 @@ PRECISELY = (1.0, 1.0, 5)
 LEFT = 1
 RIGHT = -LEFT
 
-DEBUG_MOTION_STATUS = True
+DEBUG_MOTION_STATUS = False
 
 class Navigator(FSA.FSA):
     """it gets you where you want to go"""
@@ -45,36 +47,27 @@ class Navigator(FSA.FSA):
 
         #transitions
         #@todo: move this to the actual transitions file?
-        self.atLocPositionTransition = Transition.CountTransition(navTrans.atDestination)
-        self.locRepositionTransition = Transition.CountTransition(navTrans.notAtLocPosition,
+        self.atLocPositionTransition = Transition.CountTransition(navTrans.atDestination,
                                                                   Transition.SOME_OF_THE_TIME,
-                                                                  Transition.LOW_PRECISION)
+                                                                  Transition.OK_PRECISION)
+        self.locRepositionTransition = Transition.CountTransition(navTrans.notAtLocPosition,
+                                                                  Transition.MOST_OF_THE_TIME,
+                                                                  Transition.HIGH_PRECISION)
 
         NavStates.goToPosition.transitions = {
             self.atLocPositionTransition : NavStates.atPosition,
 
-            Transition.CountTransition(navTrans.shouldDodgeLeft,
+            Transition.CountTransition(navTrans.shouldDodge,
                                        Transition.MOST_OF_THE_TIME,
                                        Transition.LOW_PRECISION)
-            : NavStates.avoidLeft,
+            : NavStates.dodge
 
-            Transition.CountTransition(navTrans.shouldDodgeRight,
+            }
+
+        NavStates.dodge.transitions = {
+            Transition.CountTransition(navTrans.doneDodging,
                                        Transition.MOST_OF_THE_TIME,
-                                       Transition.LOW_PRECISION)
-            : NavStates.avoidRight
-            }
-
-        NavStates.avoidLeft.transitions = {
-            Transition.CountTransition(navTrans.doneDodging,
-                                       Transition.ALL_OF_THE_TIME,
-                                       Transition.INSTANT)
-            : NavStates.briefStand
-            }
-
-        NavStates.avoidRight.transitions = {
-            Transition.CountTransition(navTrans.doneDodging,
-                                       Transition.ALL_OF_THE_TIME,
-                                       Transition.INSTANT)
+                                       Transition.OK_PRECISION)
             : NavStates.briefStand
             }
 
@@ -96,7 +89,7 @@ class Navigator(FSA.FSA):
         """
         Calls goTo on the playbook position
         """
-        self.goTo(self.brain.play.getPositionCoord(), precision = GENERAL_AREA,
+        self.goTo(self.brain.play.getPositionCoord(), precision = PLAYBOOK,
                   speed = QUICK_SPEED, avoidObstacles = True, fast = True, pb = True)
 
     def chaseBall(self, speed = FAST_SPEED, fast = False):
@@ -145,7 +138,10 @@ class Navigator(FSA.FSA):
         @param fast: books it using velocity walk; Best if dest is straight ahead!
         Use it to look like a baller on the field.
 
-        @param pb: Set true if playbook positioning so we switch from fast to odometry walk when in the general area
+        @param pb: Set true if playbook positioning so we switch from fast to odometry
+        walk when in the general area of our target. This allows us to ignore playbook's
+        requested heading until we are actually close to the (x, y) position, so we can
+        walk fast to the destination then correct heading once we get there.
         """
 
         # Debug prints for motion status (seeking the walking not walking bug)
@@ -173,6 +169,33 @@ class Navigator(FSA.FSA):
         NavStates.goToPosition.dest = dest
         if speed is not KEEP_SAME_SPEED:
             NavStates.goToPosition.speed = speed
+
+    def destinationWalkTo(self, walkToDest, speed = FULL_SPEED, pedantic = False):
+        """
+        Walks to a RelRobotLocation via B-Human destination walking.
+        Great for close destinations (since odometry gets bad over time) in
+        case loc is bad.
+        Doesn't avoid obstacles! (that would make it very confused and odometry
+        very bad, especially if we're being pushed).
+        Switches to standing at the end.
+        """
+        if not isinstance(walkToDest, RelRobotLocation):
+            raise TypeError, "walkToDest must be a RelRobotLocation"
+
+        NavStates.destinationWalkingTo.destQueue.clear()
+
+        NavStates.destinationWalkingTo.destQueue.append(walkToDest)
+        NavStates.destinationWalkingTo.speed = speed
+        NavStates.destinationWalkingTo.pedantic = pedantic
+
+        #reset the counter to make sure walkingTo.firstFrame() is true on entrance
+        #in case we were in destinationWalkingTo before as well
+        self.counter = 0
+        self.switchTo('destinationWalkingTo')
+
+    def updateDestinationWalkDest(self, dest):
+        """  Update the destination we're headed to   """
+        NavStates.destinationWalkingTo.destQueue.append(dest)
 
     def walkTo(self, walkToDest, speed = FULL_SPEED):
         """
@@ -205,32 +228,6 @@ class Navigator(FSA.FSA):
         if self.currentState not in ['stopped', 'stand', 'standing']:
             self.stand()
 
-    def orbitAngle(self, radius, angle):
-        """
-        Orbits a point at a certain radius for a certain angle using walkTo commands.
-        Splits the command into multiple smaller commands
-        Don't rely on it too much since it depends on the odometry of strafes
-        and turns which slips a lot
-        It will orbit in steps, each orbit taking ~30 degrees (more like 45
-        when I test it out)
-        TODO: please change this to just use a velocity walk -Octavian
-        """
-
-        NavStates.walkingTo.destQueue.clear()
-
-        #@todo: make this a bit nicer or figure out a better way to do it
-        # split it up in 15 degree moves; good enough approximation for small radii
-        for k in range(0, abs(angle) / 15):
-            if angle > 0:
-                NavStates.walkingTo.destQueue.append(RelRobotLocation(0.0, radius / 6, 0.0))
-                NavStates.walkingTo.destQueue.append(RelRobotLocation(0.0, 0.0, -15))
-            else:
-                NavStates.walkingTo.destQueue.append(RelRobotLocation(0.0, -radius / 6, 0.0))
-                NavStates.walkingTo.destQueue.append(RelRobotLocation(0.0, 0.0, 15))
-
-        NavStates.walkingTo.speed = FAST_SPEED
-        self.switchTo('walkingTo')
-
     def walk(self, x, y, theta):
         """
         Starts a new velocity walk command.
@@ -238,6 +235,13 @@ class Navigator(FSA.FSA):
         """
         NavStates.walking.speeds = (x, y, theta)
         self.switchTo('walking')
+
+    def doMotionKick(self, player, ball_rel_x, ball_rel_y, kick):
+        """
+        Enques a motion kick. Does not transition to an FSA state, so that
+        motion kicking can be done with any of our walks.
+        """
+        helper.createAndSendMotionKickVector(player, ball_rel_x, ball_rel_y, kick)
 
     def stand(self):
         """
@@ -307,6 +311,4 @@ class Navigator(FSA.FSA):
         NavStates.walking.speeds = (self.getXSpeed(), y, self.getHSpeed())
 
     def setHSpeed(self, h):
-        NavStates.walking.speeds[2] = (self.getXSpeed(), self.getYSpeed(), h)
-
-
+        NavStates.walking.speeds = (self.getXSpeed(), self.getYSpeed(), h)

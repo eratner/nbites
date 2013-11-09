@@ -57,12 +57,12 @@ def ballInPosition(player, kickPose):
     Make sure ball is somewhere we will kick it. Also makes sure we're looking
     at the ball.
     """
-    if player.brain.ball.vis.frames_on < 4:
+    if not player.brain.ball.vis.on:
         return False
 
-    #Get the current kick sweet spot information
-
-    return (fabs(kickPose.relX) < constants.BALL_X_OFFSET and
+    # NOTE don't take the absolute value of kickPose.relX because being too
+    # close to the ball is not a problem for kicking
+    return (kickPose.relX < constants.BALL_X_OFFSET and
             fabs(kickPose.relY) < constants.BALL_Y_OFFSET and
             fabs(kickPose.relH) < constants.GOOD_ENOUGH_H)
 
@@ -74,15 +74,6 @@ def ballNearPosition(player):
     return ((constants.SHOULD_KICK_AGAIN_CLOSE_X < ball.rel_x <
               constants.SHOULD_KICK_AGAIN_FAR_X) and
              fabs(ball.rel_y) < constants.SHOULD_KICK_AGAIN_Y)
-
-def ballMoved(player):
-    """
-    Ball has moved away from where it was seen last
-    """
-    ball = player.brain.ball
-    ballBefore = player.ballBeforeApproach
-    return (fabs(ball.x - ballBefore.x) > constants.BALL_MOVED_THR or
-            fabs(ball.y - ballBefore.y) > constants.BALL_MOVED_THR)
 
 def shouldKick(player):
     """
@@ -102,12 +93,18 @@ def shouldOrbit(player):
     """
     return player.brain.kickDecider.getSweetMove() is None
 
-def shouldCancelOrbit(player):
+def orbitBallTooFar(player):
     """
     Ball is far away. Don't want to finish slow orbit.
     """
     return (player.brain.ball.vis.frames_on > 4 and
             player.brain.ball.distance > constants.SHOULD_CANCEL_ORBIT_BALL_DIST)
+
+def orbitTooLong(player):
+    """
+    We have been in orbit too long, try again.
+    """
+    return (player.stateTime > constants.ORBIT_TOO_LONG_THR)
 
 ####### PENALTY KICK STUFF ###########
 
@@ -142,9 +139,29 @@ def shouldFindBall(player):
 
 def shouldFindBallKick(player):
     """
-    We lost the ball while in a kicking state, be more generous before looking
+    We have been in a kicking state too long, try again.
     """
-    return (player.brain.ball.vis.frames_off > constants.BALL_OFF_KICK_THRESH)
+    return (player.stateTime > constants.BALL_OFF_KICK_THRESH)
+
+def shouldFindBallPosition(player):
+    """
+    We lost the ball while playbook positioning. We should have a good heading,
+    so wait a while before spinning.
+    """
+    return (player.brain.ball.vis.frames_off > 30 * 3* constants.SPUN_ONCE_TIME_THRESH
+            and player.brain.nav.isAtPosition() and player.brain.nav.stateTime >
+            3 * constants.SPUN_ONCE_TIME_THRESH)
+
+def ballMoved(player):
+    """
+    Ball has moved away from where it was seen when positioning. We probably
+    dribbled through it.
+    """
+    ball = player.brain.ball
+    ballBefore = player.ballBeforeKick
+    return (ball.vis.frames_off > 15 or
+            fabs(ball.rel_x - ballBefore.rel_x) > constants.BALL_MOVED_THR or
+            fabs(ball.rel_y - ballBefore.rel_y) > constants.BALL_MOVED_THR)
 
 def shouldSpinFindBall(player):
     """
@@ -153,14 +170,14 @@ def shouldSpinFindBall(player):
     return (player.stateTime >=
             SweetMoves.getMoveTime(HeadMoves.HIGH_SCAN_BALL))
 
-def shouldSpinFindBallAgain(player):
+def spunOnce(player):
     """
-    If we have been walkFindBall-ing too long we should spin.
+    Did we spin once?
     """
-    return player.stateTime > constants.WALK_FIND_BALL_FRAMES_THRESH
+    return player.stateTime > constants.SPUN_ONCE_TIME_THRESH
 
 def shouldWalkFindBall(player):
     """
     If we've been spinFindBall-ing too long we should walk
     """
-    return player.counter > constants.WALK_FIND_BALL_FRAMES_THRESH
+    return player.stateTime > constants.WALK_FIND_BALL_TIME_THRESH

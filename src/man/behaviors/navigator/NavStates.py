@@ -38,10 +38,10 @@ def goToPosition(nav):
     if goToPosition.pb:
         # Calc dist to dest
         dist = helper.getDistToDest(nav.brain.loc, goToPosition.dest)
-        if goToPosition.fast and dist < 150:
+        if goToPosition.fast and dist < 140:
             goToPosition.fast = False
             goToPosition.dest = nav.brain.play.getPosition()
-        elif not goToPosition.fast and dist > 170:
+        elif not goToPosition.fast and dist > 160:
             goToPosition.fast = True
             goToPosition.dest = nav.brain.play.getPositionCoord()
 
@@ -109,7 +109,7 @@ def goToPosition(nav):
         goToPosition.lastSpeeds = goToPosition.speeds
 
     else:
-        if goToPosition.adaptive and relDest.relX >= 0:
+        if goToPosition.adaptive:
             #reduce the speed if we're close to the target
             speed = helper.adaptSpeed(relDest.dist,
                                     constants.ADAPT_DISTANCE,
@@ -130,22 +130,56 @@ goToPosition.speeds = ''
 goToPosition.lastSpeeds = ''
 goToPosition.bookingIt = False
 
-def avoidLeft(nav):
+# State where we are moving away from an obstacle
+def dodge(nav):
     if nav.firstFrame():
-        avoidDest = RelRobotLocation(0, 25, 0)
-        helper.setOdometryDestination(nav, avoidDest)
-        return nav.stay()
+        ## SET UP the dodge direction based on where the obstacle is
+        # if directly in front of us, move back and to one side based on
+        # where the goToPosition dest is
+        if dodge.position is dodge.position.NORTH:
+            print "Dodging NORTH obstacle"
+            relDest = helper.getRelativeDestination(nav.brain.loc,
+                                                    goToPosition.dest)
+            if relDest.relY <= 0:
+                direction = -1
+            else:
+                direction = 1
+            dodgeDest = RelRobotLocation(-15, direction*10, 0)
+        elif dodge.position is dodge.position.NORTHEAST:
+            print "Dodging NORTHEAST obstacle"
+            dodgeDest = RelRobotLocation(0, 15, 0)
+        elif dodge.position is dodge.position.EAST:
+            print "Dodging EAST obstacle"
+            dodgeDest = RelRobotLocation(0, 20, 0)
+        elif dodge.position is dodge.position.SOUTHEAST:
+            print "Dodging SOUTHEAST obstacle"
+            dodgeDest = RelRobotLocation(0, 15, 0)
+        # if directly behind us, move forward and to one side based on
+        # where the goToPosition dest is
+        elif dodge.position is dodge.position.SOUTH:
+            print "Dodging SOUTH obstacle"
+            relDest = helper.getRelativeDestination(nav.brain.loc,
+                                                    goToPosition.dest)
+            if relDest.relY <= 0:
+                direction = -1
+            else:
+                direction = 1
+            dodgeDest = RelRobotLocation(15, direction*10, 0)
+        elif dodge.position is dodge.position.SOUTHWEST:
+            print "Dodging SOUTHWEST obstacle"
+            dodgeDest = RelRobotLocation(0, -15, 0)
+        elif dodge.position is dodge.position.WEST:
+            print "Dodging WEST obstacle"
+            dodgeDest = RelRobotLocation(0, -20, 0)
+        elif dodge.position is dodge.position.NORTHWEST:
+            print "Dodging NORTHWEST obstacle"
+            dodgeDest = RelRobotLocation(0, -15, 0)
 
-    return Transition.getNextState(nav, avoidLeft)
+        helper.setOdometryDestination(nav, dodgeDest)
 
-def avoidRight(nav):
-    if nav.firstFrame():
-        avoidDest = RelRobotLocation(0, -25, 0)
-        helper.setOdometryDestination(nav, avoidDest)
-        return nav.stay()
+    return Transition.getNextState(nav, dodge)
 
-    return Transition.getNextState(nav, avoidRight)
-
+# Quick stand to stabilize from the dodge.
 def briefStand(nav):
     if nav.firstFrame():
         helper.stand(nav)
@@ -154,6 +188,32 @@ def briefStand(nav):
         return nav.goLater('goToPosition')
 
     return nav.stay()
+
+def destinationWalkingTo(nav):
+    """
+    State to be used for destination walking.
+    """
+    if nav.firstFrame():
+        destinationWalkingTo.enqueAZeroVector = False
+        return nav.stay()
+
+    if len(destinationWalkingTo.destQueue) > 0:
+        dest = destinationWalkingTo.destQueue.popleft()
+        helper.setDestination(nav, dest, 
+                              destinationWalkingTo.speed, 
+                              destinationWalkingTo.pedantic)
+        destinationWalkingTo.enqueAZeroVector = True
+        return nav.stay()
+    elif destinationWalkingTo.enqueAZeroVector:
+        helper.setDestination(nav, RelRobotLocation(0,0,0), 
+                              destinationWalkingTo.speed, 
+                              destinationWalkingTo.pedantic)
+        destinationWalkingTo.enqueAZeroVector = False
+
+    return nav.stay()
+
+destinationWalkingTo.destQueue = deque()
+destinationWalkingTo.speed = 0
 
 def walkingTo(nav):
     """
@@ -192,6 +252,19 @@ def walking(nav):
 walking.speeds = constants.ZERO_SPEEDS     # current walking speeds
 walking.lastSpeeds = constants.ZERO_SPEEDS # useful for knowing if speeds changed
 walking.transitions = {}
+
+# State to be called by walkAndKick in navigator.py
+def walkingAndKicking(nav):
+    """
+    State to be used for velocity walking AND motion kicking.
+    """
+
+    if ((walking.speeds != walking.lastSpeeds)
+        or not nav.brain.interface.motionStatus.walk_is_active):
+        helper.createAndSendMotionKickVector(nav, *walking.speeds)
+    walking.lastSpeeds = walking.speeds
+
+    return Transition.getNextState(nav, walking)
 
 ### Stopping States ###
 def stopped(nav):

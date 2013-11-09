@@ -10,8 +10,12 @@ from . import PenaltyKickStates
 from . import GoaliePositionStates
 from . import GoalieSaveStates
 from . import BrunswickStates
+from . import DribbleStates
+from . import BoxPositionStates
 
 import noggin_constants as NogginConstants
+
+from . import BoxPositionConstants as BPConstants
 from ..playbook import PBConstants
 
 from objects import Location
@@ -30,10 +34,37 @@ class SoccerPlayer(SoccerFSA.SoccerFSA):
         self.addStates(KickingStates)
         self.addStates(ChaseBallStates)
         self.addStates(BrunswickStates)
+        self.addStates(DribbleStates)
+        self.addStates(BoxPositionStates)
 
         self.setName('pBrunswick')
 
         self.inKickingState = False
+
+        # If true, robots will use a simpler positioning system than playbook,
+        # based on boxes on the field robots are responsible for, and a more static
+        # sense of positions (defender, chaser, etc.)
+        # NOT COMPLETE AS OF SUMMER 2013 SO STAY OFF!
+        self.usingBoxPositions = False
+
+        if self.usingBoxPositions:
+            #Figure out home & kickoff, even/odd player.
+            #All that good stuff...
+            if brain.playerNumber == 2:
+                self.homePosition = BPConstants.evenDefenderHome
+                self.kickoffPosition = self.homePosition
+                self.box = BPConstants.evenDefenderBox
+                self.isDefender = True
+            elif brain.playerNumber == 3:
+                self.homePosition = BPConstants.oddDefenderHome
+                self.kickoffPosition = self.homePosition
+                self.box = BPConstants.oddDefenderBox
+                self.isDefender = True
+            elif brain.playerNumber == 4:
+                self.homePosition = BPConstants.evenChaserHome
+                self.kickoffPosition = BPConstants.theirKickoff
+                self.box = BPConstants.chaserBox
+                self.isDefender = False
 
         #GOALIE COUNTERS AND BOOLEANS
         # Counters for goalie dive decision making
@@ -56,28 +87,17 @@ class SoccerPlayer(SoccerFSA.SoccerFSA):
         # Kickoff kick
         self.shouldKickOff = False
 
-        # Orbiting
-        self.shouldOrbit = False
-
     def run(self):
         self.play = self.brain.play
         gcState = self.gameState
 
         if (gcState == 'gamePlaying' and
             not self.currentState == 'afterPenalty' and
-            not self.currentState == 'gamePenalized'):
-            if not (self.currentState == 'gamePlaying'
-                and self.counter != 1):
-                # Make sure gamePlaying gets run
-                roleState = self.getNextState()
+            not self.currentState == 'gamePenalized' and
+            not self.currentState == 'gamePlaying'):
 
-                if roleState != self.currentState:
-                    self.switchTo(roleState)
+            self.shouldKickOff = False
 
-        #Goalie Penalty Kicking
-        if (gcState == 'penaltyShotsGamePlaying'
-                 and self.play.isRole(PBConstants.GOALIE)):
-            self.penaltyKicking = True
             roleState = self.getNextState()
 
             if roleState != self.currentState:
@@ -98,7 +118,7 @@ class SoccerPlayer(SoccerFSA.SoccerFSA):
         SoccerFSA.SoccerFSA.run(self)
 
     def getNextState(self):
-        if self.brain.playbook.subRoleUnchanged():
+        if not self.brain.play.changed:
             return self.currentState
 
         elif self.inKickingState:
@@ -108,11 +128,16 @@ class SoccerPlayer(SoccerFSA.SoccerFSA):
             return self.getRoleState()
 
     def getRoleState(self):
-        if self.play.isRole(PBConstants.CHASER):
+        if(self.play.isRole(PBConstants.CHASER) and
+           not BPConstants.isDefender):
             if self.brain.gameController.timeSincePlaying < 10:
+                if (self.brain.gameController.ownKickOff):
+                    self.shouldKickOff = True
+
                 return 'kickoff'
             return 'chase'
-        elif self.play.isRole(PBConstants.PENALTY_ROLE):
+        elif self.brain.gameController.penalized:
             return 'gamePenalized'
         else:
             return 'playbookPosition'
+

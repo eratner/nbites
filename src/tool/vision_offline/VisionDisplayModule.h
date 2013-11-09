@@ -16,7 +16,7 @@
 #include <QLabel>
 #include <QBoxLayout>
 #include <QToolBar>
-
+#include <math.h>
 
 #include "RoboGrams.h"
 #include "image/ImageDisplayModule.h"
@@ -27,15 +27,14 @@
 #include "PathConfig.h"
 
 #include "vision/VisionModule.h"
+#include "CameraCalibrate.h"
 
 namespace tool {
 namespace vision {
 
 class VisionDisplayModule : public QMainWindow,
                             public portals::Module
-
 {
-
     Q_OBJECT;
 
 public:
@@ -54,10 +53,12 @@ public:
     portals::InPortal<messages::PackedImage16> bYImage_in;
     portals::InPortal<messages::PackedImage16> bUImage_in;
     portals::InPortal<messages::PackedImage16> bVImage_in;
+
     portals::InPortal<messages::JointAngles> joints_in;
     portals::InPortal<messages::InertialState> inerts_in;
 
 protected slots:
+    void loadRobotParameters();
 
 protected:
     virtual void run_();
@@ -66,6 +67,8 @@ private:
     QImage makeOverlay(Camera::Type which);
 
     QTabWidget* imageTabs;
+    QPushButton* loadCalButton;
+    QComboBox* robotNames;
     Camera::Type currentCamera;
 
     // This module contains its own diagram! Trippy.
@@ -78,7 +81,6 @@ private:
     image::ThresholdedImageDisplayModule botThrDisplay;
     man::vision::VisionModule visMod;
     color::ColorTable colorTable;
-
 
     // to view vision data
     logview::TypedProtoViewer<messages::VisionField>* field_viewer;
@@ -101,8 +103,6 @@ private:
 
     portals::OutPortal<messages::JointAngles> joints;
     portals::OutPortal<messages::InertialState> inertials;
-
-
 };
 
 }

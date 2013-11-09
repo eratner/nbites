@@ -27,6 +27,7 @@
 #include "image/ImageConverterModule.h"
 
 #include "colorcreator/ColorCalibrate.h"
+#include "playbook/PlaybookCreator.h"
 
 #include "ParticleSwarm.pb.h"
 
@@ -47,6 +48,10 @@ public slots:
     void saveAsGlobalTable();
     void saveGlobalTable();
 
+private:
+    void serializeTableName(QString latestTableName);
+    void loadLatestTable();
+
 protected:
     // For keyboard control
     virtual void keyPressEvent(QKeyEvent * event);
@@ -62,6 +67,7 @@ protected:
     vision::VisionDisplayModule visDispMod;
     colorcreator::ColorCalibrate colorCalibrate;
     viewer::FieldViewer fieldView;
+    playbook::PlaybookCreator playbookCreator;
 
     man::image::ImageConverterModule topConverter;
     man::image::ImageConverterModule bottomConverter;

@@ -2,6 +2,7 @@ from . import TrackingStates
 from . import BasicStates
 from . import HeadTrackingHelper as helper
 from . import HeadMoves
+from . import TrackingConstants
 from ..util import FSA
 
 from .. import StiffnessModes as stiff
@@ -78,6 +79,10 @@ class HeadTracker(FSA.FSA):
         '''Repeat the basic fixed pitch pan.'''
         self.repeatHeadMove(HeadMoves.FIXED_PITCH_PAN)
 
+    def performBasicPan(self):
+        '''Perform the basic fixed pitch pan once.'''
+        self.performHeadMove(HeadMoves.FIXED_PITCH_PAN)
+
     def repeatWidePan(self):
         """
         Repeat the wide fixed pitch pan.
@@ -92,6 +97,9 @@ class HeadTracker(FSA.FSA):
     def performWidePan(self):
         self.performHeadMove(HeadMoves.FIXED_PITCH_PAN_WIDE)
 
+    def performBasicPan(self):
+        self.performHeadMove(HeadMoves.FIXED_PITCH_PAN)
+
     # @param invert: false if pan should start to the left,
     #                true if pan should start to the right
     def performKickPan(self, invert = False):
@@ -103,10 +111,24 @@ class HeadTracker(FSA.FSA):
         When ball is in view, tracks via vision values.
         Once ball is gone for some time, switch to wide pans.
         """
+        # Check if we're using bounceTracking
+        if TrackingConstants.USE_BOUNCE_TRACKING:
+            self.bounceTrackBall()
+            return
+
         self.target = self.brain.ball
         if (self.currentState is not 'fullPan' and
-                self.currentState is not 'tracking'):
+            self.currentState is not 'tracking'):
             self.switchTo('tracking')
+
+    def bounceTrackBall(self):
+        """
+        Same as above, but using the new bounce tracking.
+        """
+        self.target = self.brain.ball
+        if (self.currentState is not 'bounceFullPan' and
+            self.currentState is not 'bounceTracking'):
+            self.switchTo('bounceTracking')
 
     def trackFieldObject(self, newTarget):
         self.target = newTarget

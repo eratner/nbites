@@ -9,7 +9,9 @@
 #pragma once
 
 #include "MotionModel.h"
+#include <cmath>
 
+#include "RobotLocation.pb.h"
 
 namespace man
 {
@@ -25,11 +27,11 @@ public:
 
     void update(ParticleSet& particles,
                 const messages::RobotLocation& deltaMotionInfo,
-                bool nearMid = false);
+                float error);
 
     void randomlyShiftParticle(Particle* particle, bool nearMid);
 
-    void noiseShiftWithOdo(Particle* particle, float dX, float dY, float dH);
+    void noiseShiftWithOdo(Particle* particle, float dX, float dY, float dH, float error);
 
     void setFallen(bool fallen);
 
@@ -41,6 +43,9 @@ private:
     float hNoise;
 
     bool robotFallen;
+
+    messages::RobotLocation curOdometry;
+    messages::RobotLocation lastOdometry;
 };
 } // namespace localization
 } // namespace man

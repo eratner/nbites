@@ -1,41 +1,59 @@
-from . import ChaseBallTransitions as transitions
-from . import ChaseBallConstants as constants
-from ..kickDecider import kicks
-
 """
 Here we house all of the state methods used for kicking the ball
 """
 
+from . import ChaseBallTransitions as transitions
+from . import ChaseBallConstants as constants
+from ..kickDecider import kicks
+from ..navigator import Navigator
+
+def motionKickExecute(player):
+    """
+    Do a motion kick.
+    """
+    if player.firstFrame():
+        player.motionKick = False
+
+    if (transitions.shouldApproachBallAgain(player) or
+        transitions.shouldRedecideKick(player) or
+        transitions.shouldFindBallKick(player)):
+        player.inKickingState = False
+        return player.goLater('chase')
+
+    player.brain.nav.doMotionKick(player, # kind of a hack, nav is going to change soon anyway
+                                  player.brain.ball.rel_x,
+                                  player.brain.ball.rel_y,
+                                  player.kick)
+
+    return player.stay()
+
 def kickBallExecute(player):
     """
-    Kick the ball
+    Kick the ball.
     """
     if player.firstFrame():
         player.brain.tracker.trackBall()
-
         kickBallExecute.sweetMove = player.kick.sweetMove
-
-        kickBallExecute.preKickDelay = 30
+        player.shouldKickOff = False
         return player.stay()
 
-    # wait a second for stability.
-    kickBallExecute.preKickDelay -= 1
-
     # if ball has moved (and we haven't already kicked), don't kick
-    if transitions.ballMoved(player) and kickBallExecute.preKickDelay >= 0:
-        print "DEBUG_SUITE: In 'kickBallExec', ball moved so switching to prepareForKick"
-        return player.goLater('positionForKick')
+    if transitions.ballMoved(player) and player.counter < 30:
+        player.inKickingState = False
+        return player.goLater('chase')
 
-    if kickBallExecute.preKickDelay == 0:
+    if player.counter == 30:
         player.executeMove(kickBallExecute.sweetMove)
+        player.shouldKickOff = False
+        player.inKickingState = False
         return player.stay()
 
     if player.counter > 40 and player.brain.nav.isStopped():
+        player.inKickingState = False
         return player.goNow('afterKick')
 
     return player.stay()
 
-kickBallExecute.preKickDelay = 0
 kickBallExecute.sweetMove = None
 
 def afterKick(player):
@@ -53,13 +71,13 @@ def afterKick(player):
         return player.goNow('positionForKick')
 
     if player.kick.isBackKick() and player.counter > 10:
-        player.inKickingState = False
         return player.goNow('spinAfterBackKick')
 
+    if player.penaltyKicking:
+        return player.stay()
 
     if (transitions.shouldChaseBall(player) or
         transitions.shouldFindBallKick(player)):
-        player.inKickingState = False
         return player.goLater('chase')
 
     return player.stay()

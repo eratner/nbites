@@ -10,7 +10,11 @@
 
 #include "SensorModel.h"
 #include "NBMath.h"
+#include "LineSystem.h"
 
+#include "BallModel.pb.h"
+
+#include "LocStructs.h"
 #include "FieldConstants.h"
 
 #include <vector>
@@ -23,6 +27,8 @@ namespace man
 {
 namespace localization
 {
+
+static const float MIN_LINE_LENGTH = 100.f;
 
 /**
  * @class Vision System
@@ -37,15 +43,31 @@ public:
 
     // updates give particleset by reference, returns true if observations was nonempty
     bool update(ParticleSet& particles,
-                const messages::VisionField& observations);
+                const messages::VisionField& obsv);
+
+    // overloaded to use ball observations
+    bool update(ParticleSet& particles,
+                const messages::VisionField& obsv,
+                const messages::FilteredBall& ballObsv);
 
     float scoreFromVisDetect(const Particle& particle,
                              const messages::VisualDetection& obsv);
+
+    float scoreFromBallObsv(const Particle& particle,
+                            const messages::FilteredBall& obsv);
+
+    static Line prepareVisualLine(const messages::RobotLocation& loc,
+                                  const messages::VisualLine& visualLine,
+                                  bool stdLineLength = false);
+
     void setUpdated(bool val);
     float getLowestError(){return currentLowestError;};
     float getAvgError(){return avgError;};
     float getWeightedAvgError(){return weightedAvgError;};
     int getLastNumObsv(){return lastNumObsv;};
+
+    float getConfidenceError(const messages::RobotLocation& loc,
+                             const messages::VisionField& obsv);
 
     std::list<ReconstructedLocation> getReconstructedLocations(){return reconstructedLocations;};
 
@@ -58,14 +80,18 @@ private:
     void addGoalPostReconstructionsToList(messages::VisualGoalPost leftPost,
                                           messages::VisualGoalPost rightPost);
 
-    void opitmizeReconstructions();
+    void optimizeReconstructions();
 
+private:
+    LineSystem* lineSystem;
     std::list<ReconstructedLocation> reconstructedLocations;
     float avgError;
     float weightedAvgError;
     float currentLowestError;
 
     int lastNumObsv;
+
+    bool sawGoal;
 };
 } // namespace localization
 } // namespace man
