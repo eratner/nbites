@@ -15,4 +15,5 @@ target_link_libraries(dropin
   support
   portals
   messages
+  ${ALCOMMON_LIBRARIES}
 )

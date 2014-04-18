@@ -142,6 +142,7 @@ Man::Man(boost::shared_ptr<AL::ALBroker> broker, const std::string &name)
     cognitionThread.addModule(behaviors);
     cognitionThread.addModule(leds);
     cognitionThread.addModule(sharedBall);
+    cognitionThread.addModule(dropIn);
 
     topTranscriber.jointsIn.wireTo(&sensors.jointsOutput_, true);
     topTranscriber.inertsIn.wireTo(&sensors.inertialsOutput_, true);

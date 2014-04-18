@@ -24,6 +24,7 @@
 #include "sharedball/SharedBall.h"
 #include "arms/ArmContactModule.h"
 #include "obstacle/ObstacleModule.h"
+#include "dropin/DropInModule.h"
 
 #include <vector>
 
@@ -67,6 +68,7 @@ private:
     behaviors::BehaviorsModule behaviors;
     led::LedEnactorModule leds;
     context::SharedBallModule sharedBall;
+    dropin::DropInModule dropIn;
 };
 
 }
